@@ -1,0 +1,198 @@
+@import url('https://googleapis.com');
+
+:root {
+    --primary-color: #2229ff;
+    --secondary-color: #f3f3f3;
+    --trietary-color: #00064b;
+}
+
+html, body {
+    scrollbar-width: none;
+}
+
+i {
+    font-size: 1.3rem;
+}
+
+.button-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding-left: 10px;
+    border-radius: 10px;
+}
+
+button {
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    width: 120px;
+    height: 45px;
+    gap: 5px;
+    border-radius: 10px;
+    cursor: pointer;
+    background-color: transparent;
+    color: #f3f3f3;
+    border: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.selected {
+    background-color: var(--primary-color);
+    display: flex;
+}
+
+.top-ui {
+  position: relative;
+  z-index: 1000;
+  display: flex;
+  color: white;
+  width: 45%;
+  height: 8vh;
+  background-color: black;
+  border-radius: 10px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  margin: 0 auto;
+  animation: openUp 0.6s ease forwards;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.top-ui button {
+    max-height: 8vh;
+}
+
+.searchBar {
+    width: 200px;
+    height: 7vh;
+    border-radius: 10px;
+    background-color: transparent;
+    display: none; /* Just for now, I'm working on this. */
+    position: absolute; /* To not disrupt the flow of other elements */
+}
+
+.productDrawer {
+    position: absolute;
+    bottom: 5px;
+    left: 20px;
+    width: auto;
+    max-width: 25vw;
+    max-height: 50px;
+    z-index: 1000;
+    background: linear-gradient(135deg, var(--trietary-color) 0%, #000d5c 100%);
+    border-radius: 12px;
+    color: white;
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
+    padding: 12px 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(34, 41, 255, 0.3);
+    transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+    cursor: pointer;
+}
+
+.productDrawer:hover {
+    box-shadow: 0 12px 48px rgba(34, 41, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    border-color: rgba(34, 41, 255, 0.6);
+}
+
+.productDrawer.expanded {
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.productDrawer.expanded .products {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    animation: revealContents 0.4s ease forwards;
+}
+
+.productDrawer::-webkit-scrollbar {
+    width: 6px;
+}
+
+.productDrawer::-webkit-scrollbar-track {
+    background: rgba(34, 41, 255, 0.1);
+    border-radius: 10px;
+}
+
+.productDrawer::-webkit-scrollbar-thumb {
+    background: rgba(34, 41, 255, 0.5);
+    border-radius: 10px;
+    transition: background 0.3s ease;
+}
+
+.productDrawer::-webkit-scrollbar-thumb:hover {
+    background: rgba(34, 41, 255, 0.8);
+}
+
+.radarSiteName,
+.productSelected {
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
+}
+
+.products {
+    display: none;
+}
+
+.productRow {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background-color: rgba(34, 41, 255, 0.2);
+    border: 1px solid rgba(34, 41, 255, 0.4);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.productRow:hover {
+    background-color: rgba(34, 41, 255, 0.4);
+    border-color: rgba(34, 41, 255, 0.8);
+    transform: translateX(4px);
+}
+
+.productRow.selected {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(34, 41, 255, 0.5);
+}
+
+@keyframes bounce {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1)
+    }
+}
+
+@keyframes openUp {
+    from {
+        width: 0%;
+    }
+    to {
+        width: 45%;
+    }
+}
+
+@keyframes revealContents {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
