@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCDrop</title>
+
+    <!-- Mapbox -->
+
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.css" rel="stylesheet">
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.js"></script>
+
+    <!-- FontAwesome -->
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+    <link rel="stylesheet" href="./css/main.css">
+
+    <!-- Font Import -->
+
+    <link rel="stylesheet" href="https://googleapis.com"/>
+</head>
+
+<body>
+    <!-- UI START -->
+    <div class="top-ui" id="topUi">
+            <div class="search">
+                <input type="text" class="searchBar" id="searchBar" placeholder="Search for a location...">
+            </div>
+            <div class="button-container selected">
+                <i class="fa-solid fa-satellite-dish" style="color: rgb(255, 255, 255);"></i>
+                <button id="radarButton" onclick="modeRadar()">Radar</button>
+            </div>
+            <div class="button-container">
+               <i class="fa-regular fa-map" style="color: rgb(255, 255, 255);"></i>
+                <button id="outlooksButton" onclick="modeOutlooks()">Outlooks</button>
+            </div>
+            <div class="button-container">
+                <i class="fa-solid fa-location-arrow" style="color: rgb(255, 255, 255);"></i>
+                <button id="navigationButton" onclick="modeNavigation()">Navigation</button>
+            </div>
+    </div>
+
+    <div class="productDrawer" id="productDrawer">
+        <div style="display: flex; flex-direction: row; gap: 10px; align-items: center; justify-content: space-between;">
+            <div style="display: flex; flex-direction: row; gap: 10px; align-items: center;">
+                <div class="radarSiteName" id="radarSite">----</div>
+                <span style="opacity: 0.6;">•</span>
+                <div class="productSelected" id="selectedProduct">----</div>
+            </div>
+            <i class="fa-solid fa-chevron-down" id="expandToggle" style="font-size: 0.8rem; opacity: 0.7; transition: transform 0.4s ease;"></i>
+        </div>
+        <div class="products" id="productsMenu">
+            <div class="productRow" data-product-id="N0B" data-product-name="Reflectivity">Reflectivity</div>
+            <div class="productRow" data-product-id="N0S" data-product-name="Storm-Rel Velocity">Velocity (SR)</div>
+            <div class="productRow" data-product-id="TZL" data-product-name="TDWR Reflectivity">TDWR Reflectivity</div>
+            <div class="productRow" data-product-id="TV0" data-product-name="TDWR Velocity">TDWR Velocity</div>
+        </div>
+    </div>
+    <!-- UI END -->
+    <div id="map" style="position: absolute; top: 0; bottom: 0; left: 0; width: 100%;"></div>
+
+
+    <script src="./js/map.js"></script>
+    <script src="./js/alerts.js"></script>
+    <script src="./js/animation.js"></script>
+</body>
+
+</html>
