@@ -3,11 +3,10 @@ Deluge is a minimal weather app for all devices, including base features such as
 
 Deluge is currently in version ALPHA.
 
-<h2>Changelog</h2>
-Version ALPHA
+<h2>Version</h2>
 
-- Added in the files with the base features and in the process of finishing up the application before Beta and eventually v1.0.
-
+The Current Version of this application is ALPHA Version 2.
+Changelogs can be found in the "Releases" tab.
 
 <h2>Creators and Contributors</h2>
 
