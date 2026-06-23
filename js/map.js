@@ -1,7 +1,6 @@
 // API's
-
-const nwsRadars = "https://api.weather.gov/radar/stations"
-const excludedRadars = ["HWPA2", "TLKA2", "RKJK", "RKSG", "RODN"];
+const nwsRadars = "https://api.weather.gov/radar/stations";
+const excludedRadars = ["HWPA2", "TLKA2", "RKJK", "RKSG", "RODN", 'ROCO2'];
 let filteredRadarData;
 
 // Product tracking
@@ -24,31 +23,38 @@ const elSelectedRadarSite = document.getElementById("radarSite");
 const elSelectedProduct = document.getElementById("selectedProduct");
 
 const elN0B = document.getElementById("N0B");
-// const elN0Q = document.getElementById("N0Q"); - This is reflectivity and also is not functional.
 const elN0S = document.getElementById("N0S");
 const elTZL = document.getElementById("TZL");
 const elTV0 = document.getElementById("TV0");
 
 async function radars() {
-    const response = await fetch(nwsRadars);
-    const data = await response.json();
-    console.log(data);
+    try {
+        const response = await fetch(nwsRadars);
+        const data = await response.json();
+        console.log(data);
 
-    // Filter out excluded radars
-    filteredRadarData = {
-        ...data,
-        features: data.features.filter(feature => !excludedRadars.includes(feature.properties.id))
-    };
+        // Filter out excluded radars
+        filteredRadarData = {
+            ...data,
+            features: data.features.filter(feature => !excludedRadars.includes(feature.properties.id))
+        };
 
-    const radarTypes = filteredRadarData.features.map(feature => feature.properties.stationType);
-    const radarCode = filteredRadarData.features.map(feature => feature.properties.id);
+        // If the map is already loaded by the time the API returns, update the source immediately
+        if (map.isStyleLoaded() && map.getSource("radars")) {
+            map.getSource("radars").setData(filteredRadarData);
+        }
+    } catch (error) {
+        console.error("Error fetching radar data:", error);
+    }
 }
+// Start fetching the data immediately
 radars();
 
 map.on('load', () => {
+    // Safely handle if data is still fetching when the map finishes loading
     map.addSource("radars", {
         'type': 'geojson',
-        'data': filteredRadarData
+        'data': filteredRadarData || { type: 'FeatureCollection', features: [] }
     });
 
     map.addLayer({
@@ -92,8 +98,10 @@ function getProductName(productId) {
 }
 
 function selectRadarSite(radarId) {
-    if (!radarId || !window.filteredRadarData?.features) return;
-    const feature = window.filteredRadarData.features.find(f => f.properties?.id === radarId);
+    // FIXED: Removed "window." so it accurately targets the top-level let variable
+    if (!radarId || !filteredRadarData?.features) return;
+    
+    const feature = filteredRadarData.features.find(f => f.properties?.id === radarId);
     if (!feature) return;
 
     const trimmedId = radarId.substring(1);
@@ -103,7 +111,7 @@ function selectRadarSite(radarId) {
     currentTrimmedId = trimmedId;
     currentFirstLetter = firstLetter;
 
-    document.getElementById('radarSite').textContent = radarId;
+    if (elSelectedRadarSite) elSelectedRadarSite.textContent = radarId;
 
     if (firstLetter === 'K' || firstLetter === 'P') {
         selectedProduct = 'N0B';
@@ -111,7 +119,7 @@ function selectRadarSite(radarId) {
         selectedProduct = 'TZL';
     }
 
-    document.getElementById('selectedProduct').textContent = getProductName(selectedProduct);
+    if (elSelectedProduct) elSelectedProduct.textContent = getProductName(selectedProduct);
     loadRadarImage();
 
     if (map.getLayer('radar')) {
@@ -122,14 +130,8 @@ function selectRadarSite(radarId) {
             'black'
         ]);
     }
-
-    if (feature.geometry?.coordinates) {
-        map.flyTo({
-            center: feature.geometry.coordinates,
-            zoom: 7
-        });
     }
-}
+
 
 // Function to load radar image with current product
 function loadRadarImage() {
@@ -160,9 +162,10 @@ function loadRadarImage() {
         }
     }, 'alerts-outline');
 }
+
 // Function to update radar product (called from animation.js when product is selected)
 function updateRadarProduct(productId) {
     selectedProduct = productId;
-    document.getElementById('selectedProduct').textContent = getProductName(productId);
+    if (elSelectedProduct) elSelectedProduct.textContent = getProductName(productId);
     loadRadarImage();
 }
