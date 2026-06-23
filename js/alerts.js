@@ -1,4 +1,4 @@
-const nwsAPI = "https://api.weather.gov/alerts/active?code=TOR,SVR,SVA,TOA,FFW";
+const nwsAPI = "https://api.weather.gov/alerts/active?code=TOR,SVR,SVA,TOA,FFW,SPS";
 const alertFilters = [];
 
 // Color mapping for alert types
@@ -7,7 +7,8 @@ const alertColors = {
     'Severe Thunderstorm Warning': '#e49b0f',
     'Flash Flood Warning': '#00c537',
     'Tornado Watch': '#FFFF00',
-    'Severe Thunderstorm Watch': '#FF8C00'
+    'Severe Thunderstorm Watch': '#FF8C00',
+    'Special Weather Statement': '#566573',
 };
 
 // Function to categorize Tornado Warnings
@@ -147,6 +148,8 @@ function addAlertsLayer(alertData) {
                 '#FFFF00',
                 ['==', ['get', 'event'], 'Severe Thunderstorm Watch'],
                 '#FF8C00',
+                ['==', ['get', 'event'], 'Special Weather Statement'],
+                '#566573',
                 '#666666' // Default gray
             ],
             'fill-opacity': 0.6
@@ -189,9 +192,11 @@ function addAlertsLayer(alertData) {
                 '#FFFF00',
                 ['==', ['get', 'event'], 'Severe Thunderstorm Watch'],
                 '#FF8C00',
+                ['==', ['get', 'event'], 'Special Weather Statement'],
+                '#566573',
                 '#666666' // Default gray
             ],
-            'line-width': 2,
+            'line-width': 3.5,
             'line-opacity': 1
         }
     }, 'road-minor');
@@ -206,18 +211,17 @@ function addAlertsLayer(alertData) {
                 (properties.description || '').toUpperCase().includes('TORNADO EMERGENCY');
 
             // Create popup content
-            const popupHTML = `
+                        const popupHTML = `
                 <div style="font-family: Arial, sans-serif; max-width: 300px;">
                     <div style="background: ${getAlertColor(properties.event, properties)}; color: white; padding: 8px; border-radius: 4px 4px 0 0; font-weight: bold; margin: -12px -12px 8px -12px;">
                         ${alertName}
                     </div>
                     <div style="padding: 8px;">
                         <p style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px; ${isTornadoEmergency ? 'font-style: italic;' : ''}">
-                            ${properties.headline || 'No headline'}
                         </p>
                         <p style="margin: 0 0 8px 0; font-size: 12px; color: #555;">
                             <strong>Issued:</strong> ${new Date(properties.effective).toLocaleString("en-US", {hour: "numeric", minute: "numeric", month: "short", day: "numeric"})}<br>
-                            <strong>Expires:</strong> ${new Date(properties.expires).toLocaleString("en-US", {hour: "numeric", minute: "numeric", month: "short", day: "numeric"})} (${new Date() + new Date(properties.expires)} min from now.)
+                            <strong>Expires:</strong> ${new Date(properties.expires).toLocaleString("en-US", {hour: "numeric", minute: "numeric", month: "short", day: "numeric"})} (${new Date(properties.expires).toLocaleString("en-US", {hour: "numeric", minute: "numeric", month: "short", day: "numeric"})} (${Math.round((new Date(properties.expires).getTime() - Date.now()) / 60000)} min from now.)
                         </p>
                         <p style="margin: 0; font-size: 12px; line-height: 1.4; color: #333;">
                             ${properties.instruction || (properties.description ? properties.description.substring(0, 150) + '...' : 'No details')}
