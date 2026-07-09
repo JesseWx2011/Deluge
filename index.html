@@ -19,8 +19,17 @@
     <link rel="stylesheet" href="./css/main.css">
 
     <!-- Font Import -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/x-icon" src="./favicon.ico"/>
 
-    <link rel="stylesheet" href="https://googleapis.com"/>
+    <!-- Bootstrap -->
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+
 </head>
 
 <body>
@@ -29,18 +38,92 @@
             <div class="search">
                 <input type="text" class="searchBar" id="searchBar" placeholder="Search for a location...">
             </div>
-            <div class="button-container selected">
+            <div class="button-container selected" data-mode="radar">
                 <i class="fa-solid fa-satellite-dish" style="color: rgb(255, 255, 255);"></i>
                 <button id="radarButton" onclick="modeRadar()">Radar</button>
             </div>
-            <div class="button-container">
+            <div class="button-container" data-mode="outlooks">
                <i class="fa-regular fa-map" style="color: rgb(255, 255, 255);"></i>
                 <button id="outlooksButton" onclick="modeOutlooks()">Outlooks</button>
             </div>
-            <div class="button-container">
+            <div class="button-container" data-mode="navigation">
                 <i class="fa-solid fa-location-arrow" style="color: rgb(255, 255, 255);"></i>
                 <button id="navigationButton" onclick="modeNavigation()">Navigation</button>
             </div>
+    </div>
+
+   <div class="tl-ui" id="topleftUi">
+  <div class="tl-ui-header" onclick="document.getElementById('topleftUi').classList.toggle('open')">
+    <span>Radar Specs</span>
+    <span class="tl-ui-arrow"></span>
+  </div>
+  <div class="tl-ui-dropdown">
+    <div class="tl-ui-option" onclick="messageModal()">View Radar Message</div>
+  </div>
+</div>
+
+<!-- Message Modal -->
+
+<div class="modal-container" style="display: none;">
+<div class="modal" id="msgModal" tabindex="-1" role="dialog">
+        <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Radar Message</h5>
+        <button type="button" onclick="closeModal()" style="color: black; font-size: 4rem;" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="radarMessage">You have not selected a radar site. Please select a radar site to display any Radar message.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- End of Message Modal -->
+
+    <!-- Top-right options menu -->
+    <div class="menuWrapper">
+        <button class="menuButton" id="menuButton" aria-label="Menu">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+        <div class="menuDropdown" id="menuDropdown">
+            <div class="menuItem" id="camerasToggle">
+                <span><i class="fa-solid fa-video"></i> Camera Overlays</span>
+                <div class="toggleSwitch"></div>
+            </div>
+            <div class="menuItem" id="alertsToggle">
+                <span><i class="fa-solid fa-triangle-exclamation"></i> Alerts</span>
+                <div class="toggleSwitch"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Outlooks navigation (Day 1 / Day 2 / Day 3) -->
+    <div class="outlookNav" id="outlookNav">
+        <button class="outlookButton selected" data-day="day1">Day 1</button>
+        <button class="outlookButton" data-day="day2">Day 2</button>
+        <button class="outlookButton" data-day="day3">Day 3</button>
+    </div>
+
+    <!-- Colortables • Initially hidden until a proudct is selected. -->
+    <div class="right-ui" id="rightUI">
+        <div class="colortable" id="colortable"></div>
+        <div class="tickMarks" id="ticks">
+            <ul>-20</ul>
+            <ul>-10</ul>
+            <ul>0</ul>
+            <ul>10</ul>
+            <ul>20</ul>
+            <ul>30</ul>
+            <ul>40</ul>
+            <ul>50</ul>
+            <ul>60</ul>
+            <ul>70</ul>
+            <ul>80</ul>
+            <ul>90</ul>
+        </div>
     </div>
 
     <div class="productDrawer" id="productDrawer">
@@ -52,9 +135,15 @@
             </div>
             <i class="fa-solid fa-chevron-down" id="expandToggle" style="font-size: 0.8rem; opacity: 0.7; transition: transform 0.4s ease;"></i>
         </div>
+        <div class="timelineContainer" id="timelineContainer">
+            <div class="timelineLabel" id="timelineLabel">Latest</div>
+            <input type="range" class="timelineSlider" id="timelineSlider" min="0" max="19" step="1" value="0">
+            <div class="timelineTicks" id="timelineTicks"></div>
+        </div>
         <div class="products" id="productsMenu">
             <div class="productRow" data-product-id="N0B" data-product-name="Reflectivity">Reflectivity</div>
-            <div class="productRow" data-product-id="N0S" data-product-name="Storm-Rel Velocity">Velocity (SR)</div>
+            <div class="productRow" data-product-id="N0S" data-product-name="Storm-Rel Velocity">Velocity</div>
+            <div class="productRow" data-product-id="NET" data-product-name="Echo Tops">Echo Tops</div>
             <div class="productRow" data-product-id="TZL" data-product-name="TDWR Reflectivity">TDWR Reflectivity</div>
             <div class="productRow" data-product-id="TV0" data-product-name="TDWR Velocity">TDWR Velocity</div>
         </div>
@@ -64,8 +153,36 @@
 
 
     <script src="./js/map.js"></script>
+    <script src="./js/nexrad.js"></script>
     <script src="./js/alerts.js"></script>
+    <script src="./js/webcams.js"></script>
+    <script src="./js/menu.js"></script>
     <script src="./js/animation.js"></script>
+
+    <script src="https://jsdelivr.net" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>
 
+<!-- Developer Note in the Console -->
+
+<script>
+// 1. The main announcement banner
+console.log(
+    "%c Deluge %c Hi, and this is the console logs for Deluge. You will find some fancy stuff from data sources... so this is intended to be read by developers.",
+    "background: #4F46E5; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: monospace; font-size: 1.5rem;",
+    "color: #A5B4FC; background: #1E1B4B; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 1.2rem;"
+);
+
+// 2. The GitHub link line
+console.log(
+    "%c GitHub Page %c https://github.com/JesseWx2011/Deluge",
+    "background: #24292F; color: white; padding: 3px 8px; border-radius: 4px 0 0 4px; font-weight: bold; font-family: monospace;",
+    "background: #090D16; color: #38BDF8; padding: 3px 8px; border-radius: 0 4px 4px 0; font-family: monospace; text-decoration: underline;"
+);
+
+// 3. The sign-off
+console.log(
+    "%c Thank you :) - Jesse",
+    "color: #10B981; font-weight: bold; font-style: italic; font-family: monospace; font-size: 11px;"
+);
+</script>
 </html>
