@@ -1,48 +1,77 @@
 const topUi = document.getElementById("topUi");
-const topUiContents = topUi.querySelectorAll(':scope > div');
-const selectedButtons = Array.from(topUiContents).filter(btn => btn.classList.contains('selected'));
+const topUiContents = topUi ? topUi.querySelectorAll(':scope > div') : [];
+const topUiButtons = Array.from(topUiContents || []).filter((content) =>
+    content.classList.contains('button-container')
+);
 
-topUiContents.forEach(content => {
-        content.style.opacity = '0';
+function setTopUiSelection(mode) {
+    topUiButtons.forEach((buttonContainer) => {
+        const isSelected = buttonContainer.dataset.mode === mode;
+        buttonContainer.classList.toggle('selected', isSelected);
+        buttonContainer.style.opacity = '1';
+        buttonContainer.style.display = 'flex';
     });
 
+    const outlookNav = document.getElementById('outlookNav');
+    if (outlookNav) {
+        outlookNav.style.display = mode === 'outlooks' ? 'flex' : 'none';
+    }
+}
+
 function topUiOpen() {
+    setTopUiSelection('radar');
+
+    topUiContents.forEach((content) => {
+        content.style.opacity = '1';
+    });
+
     // After the opening animation completes (0.6s), reveal the contents
     setTimeout(() => {
-        topUiContents.forEach(content => {
+        topUiContents.forEach((content) => {
             content.style.animation = 'revealContents 0.4s ease forwards';
         });
     }, 600);
 }
 
-// Call topUiOpen when the page loads
-window.addEventListener('load', topUiOpen);
-
 function buttonClicks() {
-    topUiContents.forEach(function(element) {
-        element.addEventListener("click", function(event) {
-            
-            elementId = element.id;
-            elementClass = element.className;
+    topUiButtons.forEach(function (element) {
+        element.addEventListener("click", function () {
+            const selectedMode = element.dataset.mode;
+            setTopUiSelection(selectedMode);
 
-            // Remove 'selected' class from all buttons
-            topUiContents.forEach(btn => btn.classList.remove('selected'));
-            
-            // Add 'selected' class to clicked button
-            element.classList.add('selected');
-            
-            // Apply bounce animation to the newly selected button
-            element.style.animation = "none";
-            // Trigger reflow to reset animation
-            element.offsetHeight;
-            element.style.animation = "bounce 0.35s ease-out";
-            element.style.display = "flex";
-            element.style.opacity = "1"
+            const activeButton = element.querySelector('button');
+            if (activeButton) {
+                activeButton.style.animation = "none";
+                activeButton.offsetHeight;
+                activeButton.style.animation = "bounce 0.35s ease-out";
+            }
         });
     });
 }
 
+function modeRadar() {
+    setTopUiSelection('radar');
+}
+
+function modeOutlooks() {
+    setTopUiSelection('outlooks');
+}
+
+function modeNavigation() {
+    setTopUiSelection('navigation');
+}
+
+window.modeRadar = modeRadar;
+window.modeOutlooks = modeOutlooks;
+window.modeNavigation = modeNavigation;
+
 buttonClicks();
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    topUiOpen();
+} else {
+    window.addEventListener('load', topUiOpen);
+}
 
 // Product Drawer Expansion
 const productDrawer = document.getElementById('productDrawer');
@@ -93,5 +122,16 @@ productRows.forEach(row => {
         if (typeof updateRadarProduct === 'function') {
             updateRadarProduct(productId);
         }
+    });
+});
+/* ----------------------- Outlook Day Buttons (visual only) ----------------------- */
+
+const outlookButtons = document.querySelectorAll('.outlookButton');
+
+outlookButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        outlookButtons.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        // Day switching logic intentionally not wired up yet.
     });
 });
