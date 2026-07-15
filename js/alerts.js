@@ -1,7 +1,18 @@
 // https://api.weather.gov/alerts/active?code=TOR,SVR,SVA,TOA,FFW,SPS
 
-const nwsAPI = "https://api.weather.gov/alerts/active?code=TOR,SVR,SVA,TOA,FFW,SPS"
-const alertFilters = [];
+const unix = Math.floor(Date.now() / 1000);
+
+const weatherWiseAPI = 'https://data2.weatherwise.app/warnings/USA.geojson';
+const nwsAPI = `https://api.weather.gov/alerts/active?code=TOR,SVR,SVA,TOA,FFW,SPS`
+const alertFilters = ['TOR', 'SVR', 'SVA', 'TOA', 'FFW', 'SPS'];
+const supportedAlertEvents = new Set([
+    'Tornado Warning',
+    'Severe Thunderstorm Warning',
+    'Flash Flood Warning',
+    'Tornado Watch',
+    'Severe Thunderstorm Watch',
+    'Special Weather Statement'
+]);
 
 // Color mapping for alert types
 const alertColors = {
@@ -13,6 +24,72 @@ const alertColors = {
     'Special Weather Statement': '#566573',
 };
 
+
+// Mutable opacity state, tuned live from the Settings panel (see settings.js)
+let alertFillOpacity = 0.6;
+let alertLineOpacity = 1;
+
+// Builds the Mapbox "case" expression used for both fill-color and line-color.
+// Pulling this out (instead of writing the case expression twice, inline) means
+// changing a color in alertColors just needs a fresh call to this + setPaintProperty.
+function buildAlertColorExpression() {
+    return [
+        'case',
+        // Tornado Emergency (highest priority)
+        ['in', 'TORNADO EMERGENCY', ['upcase', ['get', 'description']]],
+        '#8B00FF', // Violet
+        // PDS Tornado Warning (Particularly Dangerous Situation)
+        ['all',
+            ['==', ['get', 'event'], 'Tornado Warning'],
+            ['==', ['get', 'tornadoDetection'], 'OBSERVED'],
+            ['in', 'THIS IS A PARTICULARLY DANGEROUS SITUATION', ['upcase', ['get', 'description']]]
+        ],
+        '#DDA0DD', // Light Purple
+        // Confirmed Tornado Warning
+        ['all',
+            ['==', ['get', 'event'], 'Tornado Warning'],
+            ['==', ['get', 'tornadoDetection'], 'OBSERVED']
+        ],
+        '#8B0000', // Dark Red
+        // Regular Tornado Warning
+        ['==', ['get', 'event'], 'Tornado Warning'],
+        alertColors['Tornado Warning'],
+        // Other events
+        ['==', ['get', 'event'], 'Severe Thunderstorm Warning'],
+        alertColors['Severe Thunderstorm Warning'],
+        ['==', ['get', 'event'], 'Flash Flood Warning'],
+        alertColors['Flash Flood Warning'],
+        ['==', ['get', 'event'], 'Tornado Watch'],
+        alertColors['Tornado Watch'],
+        ['==', ['get', 'event'], 'Severe Thunderstorm Watch'],
+        alertColors['Severe Thunderstorm Watch'],
+        ['==', ['get', 'event'], 'Special Weather Statement'],
+        alertColors['Special Weather Statement'],
+        '#666666' // Default gray
+    ];
+}
+
+// Called from the Settings panel whenever a color swatch or the opacity
+// slider changes. Updates the live map paint properties immediately.
+function applyAlertColorSettings(colors, opacityPercent) {
+    if (colors) {
+        Object.assign(alertColors, colors);
+    }
+    if (opacityPercent !== undefined && opacityPercent !== null) {
+        alertFillOpacity = Math.max(0, Math.min(100, Number(opacityPercent))) / 100;
+        alertLineOpacity = Math.min(1, alertFillOpacity + 0.3);
+    }
+
+    if (map.getLayer('alerts-layer')) {
+        map.setPaintProperty('alerts-layer', 'fill-color', buildAlertColorExpression());
+        map.setPaintProperty('alerts-layer', 'fill-opacity', alertFillOpacity);
+    }
+    if (map.getLayer('alerts-outline')) {
+        map.setPaintProperty('alerts-outline', 'line-color', buildAlertColorExpression());
+        map.setPaintProperty('alerts-outline', 'line-opacity', alertLineOpacity);
+    }
+}
+window.applyAlertColorSettings = applyAlertColorSettings;
 
 // Function to categorize Tornado Warnings
 function getTornadoWarningCategory(properties) {
@@ -120,6 +197,52 @@ function normalizeEvent(event) {
     return String(event || '').trim();
 }
 
+function normalizeAlertFeature(feature) {
+    if (!feature || !feature.properties) return null;
+
+    const props = feature.properties;
+    const rawEvent = normalizeEvent(props.event || props.title || props.product || props.event_type || props.type);
+    let event = rawEvent;
+
+    if (!event) {
+        const title = String(props.title || props.summary || '').toUpperCase();
+        if (title.includes('TORNADO EMERGENCY') || title.includes('TORNADO WARNING')) {
+            event = 'Tornado Warning';
+        } else if (title.includes('SEVERE THUNDERSTORM WARNING')) {
+            event = 'Severe Thunderstorm Warning';
+        } else if (title.includes('FLASH FLOOD WARNING')) {
+            event = 'Flash Flood Warning';
+        } else if (title.includes('TORNADO WATCH')) {
+            event = 'Tornado Watch';
+        } else if (title.includes('SEVERE THUNDERSTORM WATCH')) {
+            event = 'Severe Thunderstorm Watch';
+        } else if (title.includes('SPECIAL WEATHER STATEMENT')) {
+            event = 'Special Weather Statement';
+        }
+    }
+
+    if (!event || !supportedAlertEvents.has(event)) {
+        return null;
+    }
+
+    return {
+        ...feature,
+        properties: {
+            ...props,
+            event,
+            description: props.description || props.text || props.summary || props.details || '',
+            expires: props.expires || props.expires_at || props.expiresAt || props.valid_until || null,
+            areaDesc: props.areaDesc || props.area_desc || props.area || (Array.isArray(props.states) ? props.states.map(state => state.name).join(', ') : null),
+            geocode: props.geocode || (Array.isArray(props.ugcs) ? { UGC: props.ugcs } : null),
+            NWSHeadline: props.NWSHeadline || props.title || props.event || '',
+            tornadoDetection: props.tornadoDetection || props.tornado_detection || null,
+            tornadoDamageThreat: props.tornadoDamageThreat || props.tornado_damage_threat || null,
+            flashFloodDamageThreat: props.flashFloodDamageThreat || props.flash_flood_damage_threat || null,
+            alertSource: props.alertSource || 'WeatherWise'
+        }
+    };
+}
+
 function normalizeHailText(value) {
     if (!value) return null;
     const text = String(value).trim();
@@ -146,8 +269,10 @@ function normalizeHailText(value) {
     if (/nickel/.test(lower)) {
         return '0.50"';
     }
-    if (/pea/.test(lower)) {
+    if (/penny/.test(lower)) {
         return '0.25"';
+    } if (/small\s*-?\s*hail/.test(lower)) {
+        return '< 0.25"'
     }
     const textInches = lower.match(/\b(two|three|four|five)\s*-?\s*inch(?:es)?\b/);
     if (textInches) {
@@ -270,7 +395,22 @@ function getRainfallRateText(properties) {
 
 // Builds a "(ST) County1, County2" style location string from areaDesc + UGC state code
 function getLocationText(properties) {
-    const areaParts = (properties.areaDesc || '').split(';').map(s => s.trim()).filter(Boolean);
+    const rawArea = properties.areaDesc ?? properties.area_desc ?? properties.area ?? properties.location ?? null;
+    let areaText = '';
+
+    if (Array.isArray(rawArea)) {
+        areaText = rawArea.filter(Boolean).map(item => String(item)).join('; ');
+    } else if (typeof rawArea === 'string') {
+        areaText = rawArea;
+    } else if (rawArea && typeof rawArea === 'object') {
+        areaText = rawArea.name || rawArea.title || rawArea.label || JSON.stringify(rawArea);
+    }
+
+    const areaParts = String(areaText || '')
+        .split(';')
+        .map(s => String(s).trim())
+        .filter(Boolean);
+
     if (areaParts.length === 0) return null;
 
     let state = null;
@@ -336,12 +476,15 @@ function getFlashFloodBannerText(properties) {
     return null;
 }
 
-function buildAlertPopup(properties) {
+// Shared by the map popup and the alert modal: builds the ordered list of
+// label/value chips (Source, Hail, Wind, RR, Expires...) for a given alert.
+function computeAlertDetails(properties) {
     const normalizedEvent = normalizeEvent(properties.event);
-    const barColor = alertColors[normalizedEvent] || getAlertColor(normalizedEvent, properties);
-    const locationText = getLocationText(properties);
     const expiresDate = new Date(properties.expires);
-    const minutesLeft = Math.max(0, Math.round((expiresDate.getTime() - Date.now()) / 60000));
+    const totalMinutesLeft = Math.max(0, Math.round((expiresDate.getTime() - Date.now()) / 60000));
+    const hoursLeft = Math.floor(totalMinutesLeft / 60);
+    const minutesLeft = totalMinutesLeft % 60;
+    const hoursDisplay = hoursLeft > 0 ? `${hoursLeft}h ` : '';
 
     const tornadoSource = getTornadoSourceText(properties);
     const hailThreat = String(getParameterValue(properties, 'hailThreat') || '').trim();
@@ -350,16 +493,6 @@ function buildAlertPopup(properties) {
     const windText = getWindInfo(properties);
     const flashSource = extractFlashFloodSource(properties.description);
     const rainfallRate = getRainfallRateText(properties);
-
-    const bannerText = normalizedEvent === 'Tornado Warning'
-        ? getTornadoBannerText(properties)
-        : normalizedEvent === 'Severe Thunderstorm Warning'
-            ? getSvrBannerText(properties)
-            : normalizedEvent === 'Flash Flood Warning'
-                ? getFlashFloodBannerText(properties)
-                : null;
-
-    const bannerColor = getBannerColor(normalizedEvent);
 
     const details = [];
 
@@ -376,8 +509,99 @@ function buildAlertPopup(properties) {
         if (rainfallRate) details.push({ label: 'RR', value: rainfallRate });
     }
 
-    details.push({ label: 'Expires', value: `${minutesLeft} min` });
+    details.push({
+        label: 'Expires',
+        value: `${hoursDisplay}${minutesLeft} min`
+    });
 
+    return details;
+}
+
+// Lightens a "#rrggbb" hex color by the given percent (0-100), used to build
+// the alert modal's header gradient from the alert's base color.
+function lightenHexColor(hex, percent) {
+    const clean = String(hex || '#666666').replace('#', '');
+    const num = parseInt(clean.length === 3
+        ? clean.split('').map(c => c + c).join('')
+        : clean, 16);
+    if (Number.isNaN(num)) return hex;
+
+    const amount = Math.round(2.55 * percent);
+    const r = Math.min(255, (num >> 16) + amount);
+    const g = Math.min(255, ((num >> 8) & 0x00FF) + amount);
+    const b = Math.min(255, (num & 0x0000FF) + amount);
+
+    return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+}
+
+// Builds the big alert modal (name at top, feature chips, raw bulletin text)
+function buildAlertModalContent(properties) {
+    const normalizedEvent = normalizeEvent(properties.event);
+    const baseColor = getAlertColor(normalizedEvent, properties);
+    const bannerText = normalizedEvent === 'Tornado Warning'
+        ? getTornadoBannerText(properties)
+        : normalizedEvent === 'Severe Thunderstorm Warning'
+            ? getSvrBannerText(properties)
+            : normalizedEvent === 'Flash Flood Warning'
+                ? getFlashFloodBannerText(properties)
+                : null;
+
+    const title = bannerText || getAlertDisplayName(normalizedEvent, properties);
+    const details = computeAlertDetails(properties);
+    const bodyText = String(properties.description || properties.text || 'No bulletin text available.');
+
+    return {
+        title,
+        headerGradient: `linear-gradient(135deg, ${baseColor} 0%, ${lightenHexColor(baseColor, 22)} 100%)`,
+        chips: details,
+        bodyText
+    };
+}
+
+function openAlertModal(properties) {
+    const container = document.getElementById('alertModalContainer');
+    const titleEl = document.getElementById('alertModalTitle');
+    const headerEl = document.getElementById('alertModalHeader');
+    const chipsEl = document.getElementById('alertModalChips');
+    const bodyEl = document.getElementById('alertModalBody');
+
+    if (!container || !titleEl || !headerEl || !chipsEl || !bodyEl) return;
+
+    const content = buildAlertModalContent(properties);
+
+    titleEl.textContent = content.title;
+    headerEl.style.background = content.headerGradient;
+    chipsEl.innerHTML = content.chips.map(chip =>
+        `<div class="alertModalChip">${chip.label}: ${chip.value}</div>`
+    ).join('');
+    bodyEl.textContent = content.bodyText;
+
+    container.style.display = 'flex';
+}
+
+function closeAlertModal() {
+    const container = document.getElementById('alertModalContainer');
+    if (container) container.style.display = 'none';
+}
+
+window.openAlertModal = openAlertModal;
+window.closeAlertModal = closeAlertModal;
+
+function buildAlertPopup(properties) {
+    const normalizedEvent = normalizeEvent(properties.event);
+    const barColor = alertColors[normalizedEvent] || getAlertColor(normalizedEvent, properties);
+    const locationText = getLocationText(properties);
+
+    const bannerText = normalizedEvent === 'Tornado Warning'
+        ? getTornadoBannerText(properties)
+        : normalizedEvent === 'Severe Thunderstorm Warning'
+            ? getSvrBannerText(properties)
+            : normalizedEvent === 'Flash Flood Warning'
+                ? getFlashFloodBannerText(properties)
+                : null;
+
+    const bannerColor = getBannerColor(normalizedEvent);
+    const details = computeAlertDetails(properties);
     const detailRows = details.map(detail => `
                     <div class="alertPopupRow">
                         <span class="alertPopupLabel">${detail.label}:</span>
@@ -406,14 +630,46 @@ function buildAlertPopup(properties) {
 // Fetch and display alerts
 async function fetchAlerts() {
     try {
-        const response = await fetch(nwsAPI);
-        const data = await response.json();
+        const weatherWiseResponse = await fetch(weatherWiseAPI, {
+            cache: 'no-store'
+        });
 
-        console.log(data);
+        if (weatherWiseResponse.ok) {
+            const weatherWiseData = await weatherWiseResponse.json();
+            const filteredFeatures = (weatherWiseData?.features || [])
+                .map(normalizeAlertFeature)
+                .filter(Boolean);
+
+            if (filteredFeatures.length > 0) {
+                addAlertsToMap({
+                    type: 'FeatureCollection',
+                    features: filteredFeatures
+                });
+                return;
+            }
+        }
+    } catch (error) {
+        console.warn('WeatherWise alerts failed, falling back to NWS:', error);
+    }
+
+    try {
+        const response = await fetch(nwsAPI, {
+            cache: 'no-store'
+        });
+        
+        const data = await response.json();
+        const filteredFeatures = (data?.features || [])
+            .map(normalizeAlertFeature)
+            .filter(Boolean);
+
+        console.log('Alerts data:', data);
         
         // Add alerts to map if available
-        if (data.features && data.features.length > 0) {
-            addAlertsToMap(data);
+        if (filteredFeatures.length > 0) {
+            addAlertsToMap({
+                type: 'FeatureCollection',
+                features: filteredFeatures
+            });
         }
     } catch (error) {
         console.error("Error fetching alerts:", error);
@@ -430,8 +686,26 @@ function addAlertsToMap(alertData) {
     }
 }
 
+function ensureRadarLayerOrder() {
+    if (typeof map.getLayer !== 'function') return;
+
+    const hasAlertsLayer = !!map.getLayer('alerts-layer');
+    const hasAlertsOutline = !!map.getLayer('alerts-outline');
+    if (!hasAlertsLayer || !hasAlertsOutline) return;
+
+    const radarLayerId = map.getLayer('nexrad-webgl-layer')
+        ? 'nexrad-webgl-layer'
+        : (map.getLayer('radar-image-layer') ? 'radar-image-layer' : null);
+
+    if (!radarLayerId) return;
+
+    map.moveLayer(radarLayerId, 'alerts-outline');
+}
+
+window.ensureRadarLayerOrder = ensureRadarLayerOrder;
+
 function addAlertsLayer(alertData) {
-    // Remove existing source if it exists
+
     if (map.getSource('alerts')) {
         if (map.getLayer('alerts-layer')) {
             map.removeLayer('alerts-layer');
@@ -454,41 +728,8 @@ function addAlertsLayer(alertData) {
         'type': 'fill',
         'source': 'alerts',
         'paint': {
-            'fill-color': [
-                'case',
-                // Tornado Emergency (highest priority)
-                ['in', 'TORNADO EMERGENCY', ['upcase', ['get', 'description']]],
-                '#8B00FF', // Violet
-                // PDS Tornado Warning (Particularly Dangerous Situation)
-                ['all',
-                    ['==', ['get', 'event'], 'Tornado Warning'],
-                    ['==', ['get', 'tornadoDetection'], 'OBSERVED'],
-                    ['in', 'THIS IS A PARTICULARLY DANGEROUS SITUATION', ['upcase', ['get', 'description']]]
-                ],
-                '#DDA0DD', // Light Purple
-                // Confirmed Tornado Warning
-                ['all',
-                    ['==', ['get', 'event'], 'Tornado Warning'],
-                    ['==', ['get', 'tornadoDetection'], 'OBSERVED']
-                ],
-                '#8B0000', // Dark Red
-                // Regular Tornado Warning
-                ['==', ['get', 'event'], 'Tornado Warning'],
-                '#f0002c', // Red
-                // Other events
-                ['==', ['get', 'event'], 'Severe Thunderstorm Warning'],
-                '#e49b0f',
-                ['==', ['get', 'event'], 'Flash Flood Warning'],
-                '#00c537',
-                ['==', ['get', 'event'], 'Tornado Watch'],
-                '#FFFF00',
-                ['==', ['get', 'event'], 'Severe Thunderstorm Watch'],
-                '#FF8C00',
-                ['==', ['get', 'event'], 'Special Weather Statement'],
-                '#566573',
-                '#666666' // Default gray
-            ],
-            'fill-opacity': 0.6
+            'fill-color': buildAlertColorExpression(),
+            'fill-opacity': alertFillOpacity
         }
     }, 'road-minor');
 
@@ -498,68 +739,25 @@ function addAlertsLayer(alertData) {
         'type': 'line',
         'source': 'alerts',
         'paint': {
-            'line-color': [
-                'case',
-                // Tornado Emergency (highest priority)
-                ['in', 'TORNADO EMERGENCY', ['upcase', ['get', 'description']]],
-                '#8B00FF', // Violet
-                // PDS Tornado Warning (Particularly Dangerous Situation)
-                ['all',
-                    ['==', ['get', 'event'], 'Tornado Warning'],
-                    ['==', ['get', 'tornadoDetection'], 'OBSERVED'],
-                    ['in', 'THIS IS A PARTICULARLY DANGEROUS SITUATION', ['upcase', ['get', 'description']]]
-                ],
-                '#DDA0DD', // Light Purple
-                // Confirmed Tornado Warning
-                ['all',
-                    ['==', ['get', 'event'], 'Tornado Warning'],
-                    ['==', ['get', 'tornadoDetection'], 'OBSERVED']
-                ],
-                '#8B0000', // Dark Red
-                // Regular Tornado Warning
-                ['==', ['get', 'event'], 'Tornado Warning'],
-                '#f0002c', // Red
-                // Other events
-                ['==', ['get', 'event'], 'Severe Thunderstorm Warning'],
-                '#e49b0f',
-                ['==', ['get', 'event'], 'Flash Flood Warning'],
-                '#00c537',
-                ['==', ['get', 'event'], 'Tornado Watch'],
-                '#FFFF00',
-                ['==', ['get', 'event'], 'Severe Thunderstorm Watch'],
-                '#FF8C00',
-                ['==', ['get', 'event'], 'Special Weather Statement'],
-                '#566573',
-                '#666666' // Default gray
-            ],
+            'line-color': buildAlertColorExpression(),
             'line-width': 3.5,
-            'line-opacity': 1
+            'line-opacity': alertLineOpacity
         }
     }, 'road-minor');
 
-    // Handle alert polygon clicks to show popup
+    ensureRadarLayerOrder();
+
+    // Handle alert polygon clicks — open the full alert modal
     map.on('click', 'alerts-layer', (e) => {
         if (e.features.length > 0) {
-            const properties = e.features[0].properties;
-            const popupHTML = buildAlertPopup(properties);
-
-            new mapboxgl.Popup({ offset: 25, maxWidth: '340px' })
-                .setLngLat(e.lngLat)
-                .setHTML(popupHTML)
-                .addTo(map);
+            openAlertModal(e.features[0].properties);
         }
     });
 
     // Handle alert outline clicks as well
     map.on('click', 'alerts-outline', (e) => {
         if (e.features.length > 0) {
-            const properties = e.features[0].properties;
-            const popupHTML = buildAlertPopup(properties);
-
-            new mapboxgl.Popup({ offset: 25, maxWidth: '340px' })
-                .setLngLat(e.lngLat)
-                .setHTML(popupHTML)
-                .addTo(map);
+            openAlertModal(e.features[0].properties);
         }
     });
 
@@ -585,4 +783,11 @@ function addAlertsLayer(alertData) {
 fetchAlerts();
 
 // Optional: Refresh alerts every 5 minutes
-setInterval(fetchAlerts, 300000);
+setInterval(fetchAlerts, 10000);
+
+// Switching the base map style (Settings panel) wipes every custom layer,
+// so re-fetching (which rebuilds the source + layers from scratch) is enough
+// to restore alerts afterward.
+if (typeof window.registerLayerReinit === 'function') {
+    window.registerLayerReinit(fetchAlerts);
+}

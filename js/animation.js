@@ -16,6 +16,11 @@ function setTopUiSelection(mode) {
     if (outlookNav) {
         outlookNav.style.display = mode === 'outlooks' ? 'flex' : 'none';
     }
+
+    const outlookPanel = document.getElementById('outlookPanel');
+    if (outlookPanel) {
+        outlookPanel.style.display = mode === 'outlooks' ? 'block' : 'none';
+    }
 }
 
 function topUiOpen() {
@@ -51,10 +56,16 @@ function buttonClicks() {
 
 function modeRadar() {
     setTopUiSelection('radar');
+    if (typeof window.showRadarMode === 'function') {
+        window.showRadarMode();
+    }
 }
 
 function modeOutlooks() {
     setTopUiSelection('outlooks');
+    if (typeof window.showOutlookMode === 'function') {
+        window.showOutlookMode();
+    }
 }
 
 function modeNavigation() {
@@ -111,6 +122,7 @@ productRows.forEach(row => {
         const productId = row.dataset.productId;
         const productName = row.dataset.productName;
         currentSelectedProduct = productId;
+        window.currentSelectedProduct = productId;
         selectedProductDisplay.textContent = productName;
         
         // Collapse the drawer
@@ -118,9 +130,17 @@ productRows.forEach(row => {
         productDrawer.classList.remove('expanded');
         expandToggle.style.transform = 'rotate(0deg)';
         
+        // Clear the previous product's WebGL/IEM layer before loading the
+        // new one so a stale frame never lingers on screen.
+        if (typeof window.clearRadarLayers === 'function') {
+            window.clearRadarLayers();
+        }
+
         // Trigger update in map if available
         if (typeof updateRadarProduct === 'function') {
             updateRadarProduct(productId);
+        } else if (typeof window.tryRenderNexradWebGL === 'function' && window.currentRadarId) {
+            window.tryRenderNexradWebGL(window.currentRadarId, productId);
         }
     });
 });
@@ -132,6 +152,5 @@ outlookButtons.forEach(btn => {
     btn.addEventListener('click', () => {
         outlookButtons.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
-        // Day switching logic intentionally not wired up yet.
-    });
+s    });
 });
