@@ -30,6 +30,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.2.0/dist/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/antimatter15/bzip2.js@master/bzip2.js"></script>
+
 </head>
 
 <body>
@@ -53,12 +56,30 @@
     </div>
 
    <div class="tl-ui" id="topleftUi">
-  <div class="tl-ui-header" onclick="document.getElementById('topleftUi').classList.toggle('open')">
-    <span>Radar Specs</span>
-    <span class="tl-ui-arrow"></span>
+  <div class="tl-ui-header">
+    <button class="tl-ui-layers-btn" id="layersButton" aria-label="Layers" onclick="event.stopPropagation();">
+        <i class="fa-solid fa-layer-group"></i>
+    </button>
+    <span class="tl-ui-title" onclick="document.getElementById('topleftUi').classList.toggle('open')">Settings | Info</span>
+    <span class="tl-ui-arrow" onclick="document.getElementById('topleftUi').classList.toggle('open')"></span>
   </div>
   <div class="tl-ui-dropdown">
     <div class="tl-ui-option" onclick="messageModal()">View Radar Message</div>
+    <div class="tl-ui-option" onclick="userLocs()">My Locations</div>
+  </div>
+  <div class="layersDropdown" id="layersDropdown">
+      <div class="menuItem" id="camerasToggle">
+          <span><i class="fa-solid fa-video"></i> Camera Overlays</span>
+          <div class="toggleSwitch"></div>
+      </div>
+      <div class="menuItem" id="alertsToggle">
+          <span><i class="fa-solid fa-triangle-exclamation"></i> Alerts</span>
+          <div class="toggleSwitch"></div>
+      </div>
+      <div class="menuItem" id="stormTracksToggle">
+          <span><i class="fa-solid fa-arrow-trend-up"></i> Storm Tracks</span>
+          <div class="toggleSwitch"></div>
+      </div>
   </div>
 </div>
 
@@ -79,32 +100,99 @@
     </div>
   </div>
 </div>
-</div>
 
 <!-- End of Message Modal -->
 
-    <!-- Top-right options menu -->
+<!-- Alert Modal -->
+
+<div class="modal-container" id="alertModalContainer" style="display: none;" onclick="if (event.target === this) closeAlertModal();">
+    <div class="alertModal" id="alertModal">
+        <div class="alertModalHeader" id="alertModalHeader">
+            <div class="alertModalTitle" id="alertModalTitle">Alert</div>
+            <div class="alertModalChips" id="alertModalChips"></div>
+            <button class="alertModalClose" onclick="closeAlertModal()" aria-label="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="alertModalBody" id="alertModalBody"></div>
+    </div>
+</div>
+
+<!-- End of Alert Modal -->
+
+    <!-- Top-right settings menu -->
     <div class="menuWrapper">
-        <button class="menuButton" id="menuButton" aria-label="Menu">
-            <i class="fa-solid fa-bars"></i>
+        <button class="menuButton" id="settingsButton" aria-label="Settings">
+            <i class="fa-solid fa-gear"></i>
         </button>
-        <div class="menuDropdown" id="menuDropdown">
-            <div class="menuItem" id="camerasToggle">
-                <span><i class="fa-solid fa-video"></i> Camera Overlays</span>
-                <div class="toggleSwitch"></div>
+        <div class="settingsDropdown" id="settingsDropdown">
+            <div class="settingsSection">
+                <div class="settingsSectionTitle">Map Styling</div>
+                <select id="mapStyleSelect" class="settingsSelect">
+                    <option value="mapbox://styles/hastytube/cman7qzdk00al01sddqg54u7d">Default</option>
+                    <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite</option>
+                    <option value="mapbox://styles/mapbox/light-v11">Light</option>
+                    <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
+                </select>
             </div>
-            <div class="menuItem" id="alertsToggle">
-                <span><i class="fa-solid fa-triangle-exclamation"></i> Alerts</span>
-                <div class="toggleSwitch"></div>
+
+            <div class="settingsSection">
+                <div class="settingsSectionTitle">Radar Opacity</div>
+                <div class="settingsRangeRow">
+                    <input type="range" id="radarOpacityRange" class="settingsRange" min="0" max="100" value="100">
+                    <span class="settingsRangeValue" id="radarOpacityValue">100%</span>
+                </div>
+            </div>
+
+            <div class="settingsSection">
+                <div class="settingsSectionTitle">Outlooks Border Thickness</div>
+                <div class="settingsRangeRow">
+                    <input type="range" id="outlookBorderWidthRange" class="settingsRange" min="0" max="6" step="0.5" value="2">
+                    <span class="settingsRangeValue" id="outlookBorderWidthValue">2px</span>
+                </div>
+            </div>
+
+            <div class="settingsSection">
+                <div class="settingsSectionTitle">Border Opacity</div>
+                <div class="settingsRangeRow">
+                    <input type="range" id="outlookBorderOpacityRange" class="settingsRange" min="0" max="100" value="100">
+                    <span class="settingsRangeValue" id="outlookBorderOpacityValue">100%</span>
+                </div>
+            </div>
+
+            <div class="settingsSection">
+                <div class="settingsSectionTitle">Alert Colors and Opacity</div>
+                <div class="settingsColorGrid">
+                    <label class="settingsColorItem">Tornado Warning<input type="color" id="alertColor-tor" value="#f0002c"></label>
+                    <label class="settingsColorItem">Severe T-storm Warning<input type="color" id="alertColor-svr" value="#e49b0f"></label>
+                    <label class="settingsColorItem">Flash Flood Warning<input type="color" id="alertColor-ffw" value="#00c537"></label>
+                    <label class="settingsColorItem">Tornado Watch<input type="color" id="alertColor-tow" value="#ffff00"></label>
+                    <label class="settingsColorItem">Severe T-storm Watch<input type="color" id="alertColor-svw" value="#ff8c00"></label>
+                    <label class="settingsColorItem">Special Wx Statement<input type="color" id="alertColor-sws" value="#566573"></label>
+                </div>
+                                    <div class="settingsSectionTitle">Alerts Opacity</div>
+                <div class="settingsRangeRow">
+                    <input type="range" id="alertOpacityRange" class="settingsRange" min="0" max="100" value="100">
+                    <span class="settingsRangeValue" id="alertOpacityValue">100%</span>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Outlooks navigation (Day 1 / Day 2 / Day 3) -->
+    <!-- Outlooks navigation -->
     <div class="outlookNav" id="outlookNav">
-        <button class="outlookButton selected" data-day="day1">Day 1</button>
-        <button class="outlookButton" data-day="day2">Day 2</button>
-        <button class="outlookButton" data-day="day3">Day 3</button>
+        <div class="outlookNavIcon"><i class="fa-regular fa-map"></i></div>
+        <div class="outlookSelectWrap">
+            <label class="outlookSelectLabel" for="outlookSelect">Outlook Product</label>
+            <select id="outlookSelect" class="outlookSelect" aria-label="Select outlook product">
+                <option value="">Select outlook</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="outlookPanel" id="outlookPanel" style="display: none;">
+        <div class="outlookPanelTitle">Impacted Cities</div>
+        <div id="outlookCityList" class="outlookCityList"></div>
     </div>
 
     <!-- Colortables • Initially hidden until a proudct is selected. -->
@@ -129,57 +217,65 @@
     <div class="productDrawer" id="productDrawer">
         <div style="display: flex; flex-direction: row; gap: 10px; align-items: center; justify-content: space-between;">
             <div style="display: flex; flex-direction: row; gap: 10px; align-items: center;">
+                <div class="radarTypeDot" id="radarTypeDot" title="Yellow = TDWR, Black = NEXRAD"></div>
                 <div class="radarSiteName" id="radarSite">----</div>
                 <span style="opacity: 0.6;">•</span>
                 <div class="productSelected" id="selectedProduct">----</div>
             </div>
             <i class="fa-solid fa-chevron-down" id="expandToggle" style="font-size: 0.8rem; opacity: 0.7; transition: transform 0.4s ease;"></i>
         </div>
+        <div class="scanTime" id="scanTime"></div>
         <div class="timelineContainer" id="timelineContainer">
             <div class="timelineLabel" id="timelineLabel">Latest</div>
             <input type="range" class="timelineSlider" id="timelineSlider" min="0" max="19" step="1" value="0">
             <div class="timelineTicks" id="timelineTicks"></div>
         </div>
         <div class="products" id="productsMenu">
-            <div class="productRow" data-product-id="N0B" data-product-name="Reflectivity">Reflectivity</div>
-            <div class="productRow" data-product-id="N0S" data-product-name="Storm-Rel Velocity">Velocity</div>
-            <div class="productRow" data-product-id="NET" data-product-name="Echo Tops">Echo Tops</div>
-            <div class="productRow" data-product-id="TZL" data-product-name="TDWR Reflectivity">TDWR Reflectivity</div>
-            <div class="productRow" data-product-id="TV0" data-product-name="TDWR Velocity">TDWR Velocity</div>
+            <!-- NEXRAD -->
+            <div class="productRow" data-product-id="N0B" data-product-name="Reflectivity" data-family="nexrad">Reflectivity</div>
+            <div class="productRow" data-product-id="N0G" data-product-name="Base Velocity" data-family="nexrad">Base Velocity</div>
+            <div class="productRow" data-product-id="N0C" data-product-name="Corr. Coefficient" data-family="nexrad">Corr. Coefficient</div>
+            <div class="productRow" data-product-id="N0K" data-product-name="Diff. Reflectivity" data-family="nexrad">Diff. Reflectivity</div>
+            <div class="productRow" data-product-id="NET" data-product-name="Echo Tops" data-family="nexrad">Echo Tops</div>
+            <!-- TDWR -->
+            <div class="productRow" data-product-id="TZ0" data-product-name="TDWR Reflectivity (Tilt 1)" data-family="tdwr">TDWR Reflectivity (Tilt 1)</div>
+            <div class="productRow" data-product-id="TZ1" data-product-name="TDWR Reflectivity (Tilt 2)" data-family="tdwr">TDWR Reflectivity (Tilt 2)</div>
+            <div class="productRow" data-product-id="TZ2" data-product-name="TDWR Reflectivity (Tilt 3)" data-family="tdwr">TDWR Reflectivity (Tilt 3)</div>
+            <div class="productRow" data-product-id="TZL" data-product-name="TDWR Reflectivity (Long Range)" data-family="tdwr">TDWR Reflectivity (Long Range)</div>
+            <div class="productRow" data-product-id="TV0" data-product-name="TDWR Velocity (Tilt 1)" data-family="tdwr">TDWR Velocity (Tilt 1)</div>
+            <div class="productRow" data-product-id="TV1" data-product-name="TDWR Velocity (Tilt 2)" data-family="tdwr">TDWR Velocity (Tilt 2)</div>
+            <div class="productRow" data-product-id="TV2" data-product-name="TDWR Velocity (Tilt 3)" data-family="tdwr">TDWR Velocity (Tilt 3)</div>
         </div>
     </div>
     <!-- UI END -->
     <div id="map" style="position: absolute; top: 0; bottom: 0; left: 0; width: 100%;"></div>
 
 
+    
     <script src="./js/map.js"></script>
-    <script src="./js/nexrad.js"></script>
+    <script src="./js/nexrad-render.js"></script>
+    <script type="module" src="./js/nexrad.js"></script>
     <script src="./js/alerts.js"></script>
     <script src="./js/webcams.js"></script>
+    <script src="./js/storm-tracks.js"></script>
+    <script src="./js/settings.js"></script>
     <script src="./js/menu.js"></script>
     <script src="./js/animation.js"></script>
-
-    <script src="https://jsdelivr.net" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 </body>
 
-<!-- Developer Note in the Console -->
-
 <script>
-// 1. The main announcement banner
 console.log(
     "%c Deluge %c Hi, and this is the console logs for Deluge. You will find some fancy stuff from data sources... so this is intended to be read by developers.",
     "background: #4F46E5; color: white; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-family: monospace; font-size: 1.5rem;",
     "color: #A5B4FC; background: #1E1B4B; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 1.2rem;"
 );
 
-// 2. The GitHub link line
 console.log(
     "%c GitHub Page %c https://github.com/JesseWx2011/Deluge",
     "background: #24292F; color: white; padding: 3px 8px; border-radius: 4px 0 0 4px; font-weight: bold; font-family: monospace;",
     "background: #090D16; color: #38BDF8; padding: 3px 8px; border-radius: 0 4px 4px 0; font-family: monospace; text-decoration: underline;"
 );
 
-// 3. The sign-off
 console.log(
     "%c Thank you :) - Jesse",
     "color: #10B981; font-weight: bold; font-style: italic; font-family: monospace; font-size: 11px;"
