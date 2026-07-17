@@ -28,11 +28,27 @@ const awsLevelIIIBucket = "https://unidata-nexrad-level3.s3.amazonaws.com/";
 const NEXRAD_L3_PACKET_DIGITAL_RADIAL = 16;
 const NEXRAD_L3_PACKET_RLE_RADIAL = 0xAF1F; // 44831 — legacy 16-level Radial Data Packet
 
+const units = {
+    153: 'DBz', // Reflectivity
+    154: 'm/s', // Velocity
+    161: "%", // Correlation Coeffecient
+}
+
 // Default byte-value -> physical-unit conversion per product, used when we
 // can't confidently pull scale/offset out of the Product Description Block.
 // value = (rawByte - offset) / scale
 const NEXRAD_DEFAULT_SCALE_OFFSET = {
-    N0B: { scale: 2.0, offset: 66.0, unit: 'dBZ' }
+    N0B: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
+    N0G: { scale: 2.0, offset: 128.0, unit: 'm/s' },
+    N0C: { scale: 1.0, offset: 0.0, unit: '%' },
+    N0K: { scale: 1.0, offset: 0.0, unit: 'dB' },
+    TZ0: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
+    TZ1: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
+    TZ2: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
+    TZL: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
+    TV0: { scale: 2.0, offset: 128.0, unit: 'm/s' },
+    TV1: { scale: 2.0, offset: 128.0, unit: 'm/s' },
+    TV2: { scale: 2.0, offset: 128.0, unit: 'm/s' }
 };
 
 // Per-product gate geometry (number of range gates x range-scale in km).
@@ -619,6 +635,26 @@ const VELOCITY_STOPS = [
     [174, [255, 220, 240, 255]]
 ];
 
+const CORRELATION_COEFFICIENT_STOPS = [
+    [0, [0, 0, 0, 0]],
+    [50, [255, 0, 0, 255]],
+    [70, [255, 165, 0, 255]],
+    [80, [255, 255, 0, 255]],
+    [90, [0, 255, 0, 255]],
+    [95, [0, 128, 255, 255]],
+    [100, [0, 0, 255, 255]]
+];
+
+const DIFFERENTIAL_REFLECTIVITY_STOPS = [
+    [-5, [0, 0, 255, 255]],
+    [-2, [0, 128, 255, 255]],
+    [0, [0, 255, 0, 255]],
+    [1, [255, 255, 0, 255]],
+    [3, [255, 165, 0, 255]],
+    [5, [255, 0, 0, 255]],
+    [7, [128, 0, 128, 255]]
+];
+
 
 function interpolateStops(stops, value) {
     if (value <= stops[0][0]) return stops[0][1];
@@ -646,29 +682,102 @@ function interpolateStops(stops, value) {
 // built-in ramp above instead of failing the whole render.
 async function loadProjectColorLut(product) {
     try {
-        const response = await fetch(`../json/colortables/${product}.json`);
+        // Map products to their colortable subdirectories
+        const productToSubdir = {
+            // Reflectivity products
+            'N0B': 'Reflectivity',
+            'TZ0': 'Reflectivity',
+            'TZ1': 'Reflectivity',
+            'TZ2': 'Reflectivity',
+            'TZL': 'Reflectivity',
+            // Velocity products
+            'N0G': 'Velocity',
+            'TV0': 'Velocity',
+            'TV1': 'Velocity',
+            'TV2': 'Velocity',
+            // Correlation Coefficient
+            'N0C': 'CC',
+            // Differential Reflectivity
+            'N0K': 'DF'
+        };
+
+        const subdir = productToSubdir[product] || 'Reflectivity';
+        
+        // Get color table for this specific product type
+        let selectedTable = 'IEM';
+        if (typeof window.getColorTableForProduct === 'function') {
+            selectedTable = window.getColorTableForProduct(product);
+        } else if (window.selectedColorTable) {
+            selectedTable = window.selectedColorTable;
+        }
+        
+        // Map color table names to file extensions
+        // Reflectivity: IEM.json, Base.pal, Jesse.pal, Radarscope.pal
+        // Velocity: IEM.json, Default.pal
+        // CC: Default.pal
+        // DF: Default.pal
+        const tableExtensions = {
+            'IEM': '.json',
+            'Base': '.pal',
+            'Jesse': '.pal',
+            'Radarscope': '.pal',
+            'Default': '.pal',
+            'DefaultI': '.pal',
+        };
+        
+        const extension = tableExtensions[selectedTable] || '.json';
+        const filename = selectedTable + extension;
+        
+        const response = await fetch(`../json/colortables/${subdir}/${filename}`);
         if (!response.ok) return null;
-        const json = await response.json();
+        const text = await response.text();
 
         let stops = null;
-        if (Array.isArray(json)) {
-            if (Array.isArray(json[0])) {
-                // [[value, [r,g,b,a]], ...] or [[value, "#rrggbb"], ...]
-                stops = json.map(([value, color]) => [value, normalizeColor(color)]);
-            } else if (json[0] && typeof json[0] === 'object') {
-                // [{ value, color }, ...]
-                stops = json.map((entry) => [entry.value, normalizeColor(entry.color)]);
+        
+        if (extension === '.json') {
+            // Parse JSON format
+            const json = JSON.parse(text);
+            if (Array.isArray(json)) {
+                if (Array.isArray(json[0])) {
+                    // [[value, [r,g,b,a]], ...] or [[value, "#rrggbb"], ...]
+                    stops = json.map(([value, color]) => [value, normalizeColor(color)]);
+                } else if (json[0] && typeof json[0] === 'object') {
+                    // [{ value, color }, ...]
+                    stops = json.map((entry) => [entry.value, normalizeColor(entry.color)]);
+                }
+            } else if (json && typeof json === 'object') {
+                // { "value": "#rrggbb", ... }
+                stops = Object.entries(json).map(([value, color]) => [Number(value), normalizeColor(color)]);
             }
-        } else if (json && typeof json === 'object') {
-            // { "value": "#rrggbb", ... }
-            stops = Object.entries(json).map(([value, color]) => [Number(value), normalizeColor(color)]);
+        } else if (extension === '.pal') {
+            // Parse .pal format (custom format with lines like "color: value r g b" or "SolidColor: value r g b")
+            stops = [];
+            const lines = text.split('\n');
+            for (const line of lines) {
+                // Match both "color:" and "SolidColor:" formats
+                const match = line.match(/^(?:color(?:\d+)?|SolidColor):\s*(-?\d+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+(\d+)/);
+                if (match) {
+                    const value = parseFloat(match[1]);
+                    const r = parseInt(match[2], 10);
+                    const g = parseInt(match[3], 10);
+                    const b = parseInt(match[4], 10);
+                    stops.push([value, [r, g, b, 255]]);
+                }
+            }
+            console.log(`Parsed ${stops.length} color stops from ${filename}`);
         }
 
-        if (!stops || stops.some((s) => !Number.isFinite(s[0]) || !s[1])) return null;
+        // Validate that we got valid stops
+        if (!stops || stops.length === 0) {
+            console.warn(`No color stops parsed from ${filename}, returning null`);
+            return null;
+        }
+        
+        if (stops.some((s) => !Number.isFinite(s[0]) || !s[1])) return null;
         stops.sort((a, b) => a[0] - b[0]);
         return stops;
     } catch (error) {
-        console.warn(`No usable colortable JSON for ${product}, using built-in ramp:`, error);
+        console.warn(`No usable colortable for ${product}, using built-in ramp:`, error);
         return null;
     }
 }
@@ -693,6 +802,16 @@ function isVelocityProduct(product) {
     return ['N0G', 'TV0', 'TV1', 'TV2'].includes((product || '').toUpperCase());
 }
 
+// Products whose values are correlation coefficient (percentage)
+function isCorrelationCoefficientProduct(product) {
+    return ['N0C'].includes((product || '').toUpperCase());
+}
+
+// Products whose values are differential reflectivity (dB)
+function isDifferentialReflectivityProduct(product) {
+    return ['N0K'].includes((product || '').toUpperCase());
+}
+
 // Builds a 256-entry lookup table (byte value -> RGBA) for a given product.
 // `is16Level` is set when the data came from the legacy RLE Radial Data
 // Packet (0xAF1F) rather than the Digital Radial Data Array Packet (16) —
@@ -701,7 +820,24 @@ function isVelocityProduct(product) {
 async function buildColorLut(product, is16Level) {
     const conversion = NEXRAD_DEFAULT_SCALE_OFFSET[product] || NEXRAD_DEFAULT_SCALE_OFFSET.N0B;
     const projectStops = await loadProjectColorLut(product);
-    const stops = projectStops || (isVelocityProduct(product) ? VELOCITY_STOPS : REFLECTIVITY_STOPS);
+    let stops;
+    if (projectStops && projectStops.length > 0) {
+        stops = projectStops;
+    } else if (isVelocityProduct(product)) {
+        stops = VELOCITY_STOPS;
+    } else if (isCorrelationCoefficientProduct(product)) {
+        stops = CORRELATION_COEFFICIENT_STOPS;
+    } else if (isDifferentialReflectivityProduct(product)) {
+        stops = DIFFERENTIAL_REFLECTIVITY_STOPS;
+    } else {
+        stops = REFLECTIVITY_STOPS;
+    }
+
+    // Validate stops array before proceeding
+    if (!stops || stops.length === 0) {
+        console.warn(`No valid color stops found for product ${product}, using REFLECTIVITY_STOPS as fallback`);
+        stops = REFLECTIVITY_STOPS;
+    }
 
     const lut = new Uint8ClampedArray(256 * 4);
 

@@ -1,7 +1,7 @@
 // Top-right settings menu + top-left layers dropdown (camera overlay / alerts / storm tracks toggles)
 
 const settingsButton = document.getElementById("settingsButton");
-const settingsDropdown = document.getElementById("settingsDropdown");
+const settingsModalContainer = document.getElementById("settingsModalContainer");
 
 const layersButton = document.getElementById("layersButton");
 const layersDropdown = document.getElementById("layersDropdown");
@@ -10,20 +10,25 @@ let camerasVisible = true;
 let alertsVisible = true;
 let stormTracksVisible = true;
 
-function toggleSettingsDropdown() {
-    settingsDropdown.classList.toggle("open");
+function openSettingsModal() {
+    if (settingsModalContainer) {
+        settingsModalContainer.style.display = "flex";
+    }
 }
+
+function closeSettingsModal() {
+    if (settingsModalContainer) {
+        settingsModalContainer.style.display = "none";
+    }
+}
+
+window.closeSettingsModal = closeSettingsModal;
 
 function toggleLayersDropdown() {
     layersDropdown.classList.toggle("open");
 }
 
 function closeMenusOnOutsideClick(event) {
-    if (settingsDropdown && settingsButton &&
-        !settingsDropdown.contains(event.target) && !settingsButton.contains(event.target)) {
-        settingsDropdown.classList.remove("open");
-    }
-
     if (layersDropdown && layersButton &&
         !layersDropdown.contains(event.target) && !layersButton.contains(event.target)) {
         layersDropdown.classList.remove("open");
@@ -35,7 +40,7 @@ document.addEventListener("click", closeMenusOnOutsideClick);
 if (settingsButton) {
     settingsButton.addEventListener("click", (e) => {
         e.stopPropagation();
-        toggleSettingsDropdown();
+        openSettingsModal();
     });
 }
 

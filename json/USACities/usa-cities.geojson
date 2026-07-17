@@ -1,0 +1,390 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.9378, 41.2565] },
+      "properties": { "city": "Omaha", "state": "NE" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.2378, 41.2831] },
+      "properties": { "city": "Elkhorn", "state": "NE" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.6249, 41.5868] },
+      "properties": { "city": "Des Moines", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.6646, 42.5006] },
+      "properties": { "city": "Dubuque", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-94.9289, 42.0208] },
+      "properties": { "city": "Nevada", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-92.8755, 42.5725] },
+      "properties": { "city": "Parkersburg", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.6852, 43.5446] },
+      "properties": { "city": "Sioux Falls", "state": "SD" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-94.6322, 39.0997] },
+      "properties": { "city": "Kansas City", "state": "MO" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.3301, 37.6872] },
+      "properties": { "city": "Wichita", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-70.2553, 43.6615] },
+      "properties": { "city": "Portland", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-68.7788, 44.5515] },
+      "properties": { "city": "Bangor", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-72.5778, 44.2601] },
+      "properties": { "city": "Burlington", "state": "VT" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.7562, 42.6526] },
+      "properties": { "city": "Albany", "state": "NY" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-76.0059, 43.0481] },
+      "properties": { "city": "Syracuse", "state": "NY" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-73.471428, 44.699764] },
+      "properties": { "city": "Plattsburgh", "state": "NY" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-72.5754, 44.2601] },
+      "properties": { "city": "Montpelier", "state": "VT" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.6298, 41.8781] },
+      "properties": { "city": "Chicago", "state": "IL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-89.6501, 39.7817] },
+      "properties": { "city": "Springfield", "state": "IL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-89.5890, 40.6936] },
+      "properties": { "city": "Peoria", "state": "IL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-88.2434, 40.1164] },
+      "properties": { "city": "Champaign", "state": "IL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-89.0932, 38.2562] },
+      "properties": { "city": "Rochelle", "state": "IL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-86.1581, 39.7684] },
+      "properties": { "city": "Indianapolis", "state": "IN" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-85.1394, 41.0793] },
+      "properties": { "city": "Fort Wayne", "state": "IN" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-86.2503, 41.6764] },
+      "properties": { "city": "South Bend", "state": "IN" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.5558, 37.9716] },
+      "properties": { "city": "Evansville", "state": "IN" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-86.1343, 40.4864] },
+      "properties": { "city": "Kokomo", "state": "IN" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-92.2896, 34.7465] },
+      "properties": { "city": "Little Rock", "state": "AR" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-94.1574, 35.3859] },
+      "properties": { "city": "Fort Smith", "state": "AR" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-94.1288, 36.0626] },
+      "properties": { "city": "Fayetteville", "state": "AR" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.7043, 35.8423] },
+      "properties": { "city": "Jonesboro", "state": "AR" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.0552, 34.5037] },
+      "properties": { "city": "Hot Springs", "state": "AR" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-86.8025, 33.5186] },
+      "properties": { "city": "Birmingham", "state": "AL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-86.3006, 32.3668] },
+      "properties": { "city": "Montgomery", "state": "AL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-86.5861, 34.7304] },
+      "properties": { "city": "Huntsville", "state": "AL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-88.0431, 30.6954] },
+      "properties": { "city": "Mobile", "state": "AL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.5692, 33.2098] },
+      "properties": { "city": "Tuscaloosa", "state": "AL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.3880, 33.7490] },
+      "properties": { "city": "Atlanta", "state": "GA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-81.9648, 33.4735] },
+      "properties": { "city": "Augusta", "state": "GA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-81.0912, 32.0809] },
+      "properties": { "city": "Savannah", "state": "GA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.9877, 32.4610] },
+      "properties": { "city": "Columbus", "state": "GA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-83.6324, 32.8407] },
+      "properties": { "city": "Macon", "state": "GA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.5164, 35.4676] },
+      "properties": { "city": "Oklahoma City", "state": "OK" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.9928, 36.1540] },
+      "properties": { "city": "Tulsa", "state": "OK" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.4395, 35.2226] },
+      "properties": { "city": "Norman", "state": "OK" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-98.3934, 34.6036] },
+      "properties": { "city": "Lawton", "state": "OK" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.8784, 36.3956] },
+      "properties": { "city": "Enid", "state": "OK" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.6894, 39.0456] },
+      "properties": { "city": "Topeka", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-94.6708, 38.9822] },
+      "properties": { "city": "Overland Park", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-95.2353, 38.9717] },
+      "properties": { "city": "Lawrence", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.5717, 39.1836] },
+      "properties": { "city": "Manhattan", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-97.9298, 38.0608] },
+      "properties": { "city": "Hutchinson", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-100.0165, 37.7528] },
+      "properties": { "city": "Dodge City", "state": "KS" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-91.6656, 41.9779] },
+      "properties": { "city": "Cedar Rapids", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.5770, 41.5236] },
+      "properties": { "city": "Davenport", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-96.4003, 42.4963] },
+      "properties": { "city": "Sioux City", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-92.3311, 42.4928] },
+      "properties": { "city": "Waterloo", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-93.6204, 42.0308] },
+      "properties": { "city": "Ames", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-91.5302, 41.6611] },
+      "properties": { "city": "Iowa City", "state": "IA" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.0397, 30.6324] },
+      "properties": { "city": "Milton", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-87.2169, 30.4213] },
+      "properties": { "city": "Pensacola", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-84.2807, 30.4383] },
+      "properties": { "city": "Tallahassee", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-81.6557, 30.3322] },
+      "properties": { "city": "Jacksonville", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-82.4572, 27.9506] },
+      "properties": { "city": "Tampa", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-81.3792, 28.5383] },
+      "properties": { "city": "Orlando", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-80.1920932, 25.761538] },
+      "properties": { "city": "Miami", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-80.358307, 27.2731061] },
+      "properties": { "city": "Port St. Lucie", "state": "FL" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-68.0120, 46.6792] },
+      "properties": { "city": "Presque Isle", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-68.0117, 46.8606] },
+      "properties": { "city": "Caribou", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-69.0642, 47.0673] },
+      "properties": { "city": "Allagash", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-68.3287, 47.3619] },
+      "properties": { "city": "Fort Kent", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-67.4614502, 44.7150737] },
+      "properties": { "city": "Houlton", "state": "ME" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-112.072723, 33.4482998] },
+      "properties": { "city": "Phoenix", "state": "AZ" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-110.974169, 32.2538301] },
+      "properties": { "city": "Tuscon", "state": "AZ" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-112.0392299, 46.5891156] },
+      "properties": { "city": "Helena", "state": "MT" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-111.0373594, 45.6793403] },
+      "properties": { "city": "Bozeman", "state": "MT" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-109.6842918, 48.5498843] },
+      "properties": { "city": "Harve", "state": "MT" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-116.2034255, 43.6160406] },
+      "properties": { "city": "Boise", "state": "ID" }
+    }
+  ]
+}

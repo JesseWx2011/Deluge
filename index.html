@@ -33,6 +33,11 @@
     <script src="https://cdn.jsdelivr.net/npm/pako@2.2.0/dist/pako.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/antimatter15/bzip2.js@master/bzip2.js"></script>
 
+    <!-- Additional Metas -->
+
+    <meta type="date" content="2026-07-16"/>
+    <meta name="author" content="JesseWx2011"/>
+
 </head>
 
 <body>
@@ -125,55 +130,120 @@
         <button class="menuButton" id="settingsButton" aria-label="Settings">
             <i class="fa-solid fa-gear"></i>
         </button>
-        <div class="settingsDropdown" id="settingsDropdown">
-            <div class="settingsSection">
-                <div class="settingsSectionTitle">Map Styling</div>
-                <select id="mapStyleSelect" class="settingsSelect">
-                    <option value="mapbox://styles/hastytube/cman7qzdk00al01sddqg54u7d">Default</option>
-                    <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite</option>
-                    <option value="mapbox://styles/mapbox/light-v11">Light</option>
-                    <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
-                </select>
-            </div>
+    </div>
 
-            <div class="settingsSection">
-                <div class="settingsSectionTitle">Radar Opacity</div>
-                <div class="settingsRangeRow">
-                    <input type="range" id="radarOpacityRange" class="settingsRange" min="0" max="100" value="100">
-                    <span class="settingsRangeValue" id="radarOpacityValue">100%</span>
-                </div>
+    <!-- Settings Modal -->
+    <div class="modal-container" id="settingsModalContainer" style="display: none;" onclick="if (event.target === this) closeSettingsModal();">
+        <div class="settingsModal" id="settingsModal">
+            <div class="settingsModalHeader">
+                <div class="settingsModalTitle">Settings</div>
+                <button class="settingsModalClose" onclick="closeSettingsModal()" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
-
-            <div class="settingsSection">
-                <div class="settingsSectionTitle">Outlooks Border Thickness</div>
-                <div class="settingsRangeRow">
-                    <input type="range" id="outlookBorderWidthRange" class="settingsRange" min="0" max="6" step="0.5" value="2">
-                    <span class="settingsRangeValue" id="outlookBorderWidthValue">2px</span>
-                </div>
+            
+            <!-- Tab Navigation -->
+            <div class="settingsTabs">
+                <button class="settingsTab active" data-tab="map">Map Settings</button>
+                <button class="settingsTab" data-tab="colortables">Colortables</button>
+                <button class="settingsTab" data-tab="alerts">Alert Colors</button>
             </div>
+            
+            <div class="settingsModalBody">
+                <!-- Map Settings Tab -->
+                <div class="settingsTabContent active" id="tab-map">
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Map Styling</div>
+                        <select id="mapStyleSelect" class="settingsSelect">
+                            <option value="mapbox://styles/hastytube/cman7qzdk00al01sddqg54u7d">Default</option>
+                            <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite</option>
+                            <option value="mapbox://styles/mapbox/light-v11">Light</option>
+                            <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
+                        </select>
+                    </div>
 
-            <div class="settingsSection">
-                <div class="settingsSectionTitle">Border Opacity</div>
-                <div class="settingsRangeRow">
-                    <input type="range" id="outlookBorderOpacityRange" class="settingsRange" min="0" max="100" value="100">
-                    <span class="settingsRangeValue" id="outlookBorderOpacityValue">100%</span>
-                </div>
-            </div>
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Radar Opacity</div>
+                        <div class="settingsRangeRow">
+                            <input type="range" id="radarOpacityRange" class="settingsRange" min="0" max="100" value="100">
+                            <span class="settingsRangeValue" id="radarOpacityValue">100%</span>
+                        </div>
+                    </div>
 
-            <div class="settingsSection">
-                <div class="settingsSectionTitle">Alert Colors and Opacity</div>
-                <div class="settingsColorGrid">
-                    <label class="settingsColorItem">Tornado Warning<input type="color" id="alertColor-tor" value="#f0002c"></label>
-                    <label class="settingsColorItem">Severe T-storm Warning<input type="color" id="alertColor-svr" value="#e49b0f"></label>
-                    <label class="settingsColorItem">Flash Flood Warning<input type="color" id="alertColor-ffw" value="#00c537"></label>
-                    <label class="settingsColorItem">Tornado Watch<input type="color" id="alertColor-tow" value="#ffff00"></label>
-                    <label class="settingsColorItem">Severe T-storm Watch<input type="color" id="alertColor-svw" value="#ff8c00"></label>
-                    <label class="settingsColorItem">Special Wx Statement<input type="color" id="alertColor-sws" value="#566573"></label>
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Outlooks Border Thickness</div>
+                        <div class="settingsRangeRow">
+                            <input type="range" id="outlookBorderWidthRange" class="settingsRange" min="0" max="6" step="0.5" value="2">
+                            <span class="settingsRangeValue" id="outlookBorderWidthValue">2px</span>
+                        </div>
+                    </div>
+
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Border Opacity</div>
+                        <div class="settingsRangeRow">
+                            <input type="range" id="outlookBorderOpacityRange" class="settingsRange" min="0" max="100" value="100">
+                            <span class="settingsRangeValue" id="outlookBorderOpacityValue">100%</span>
+                        </div>
+                    </div>
                 </div>
-                                    <div class="settingsSectionTitle">Alerts Opacity</div>
-                <div class="settingsRangeRow">
-                    <input type="range" id="alertOpacityRange" class="settingsRange" min="0" max="100" value="100">
-                    <span class="settingsRangeValue" id="alertOpacityValue">100%</span>
+                
+                <!-- Colortables Tab -->
+                <div class="settingsTabContent" id="tab-colortables">
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Reflectivity</div>
+                        <select id="colorTableReflectivity" class="settingsSelect">
+                            <option value="IEM">IEM (Default)</option>
+                            <option value="Base">Base</option>
+                            <option value="Jesse">Jesse</option>
+                            <option value="Radarscope">RadarScope</option>
+                        </select>
+                    </div>
+
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Velocity</div>
+                        <select id="colorTableVelocity" class="settingsSelect">
+                            <option value="IEM">IEM (Default)</option>
+                            <option value="Default">Default</option>
+                            <option value="VelocityI">Velocity I</option>
+                        </select>
+                    </div>
+
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Correlation Coefficient (CC)</div>
+                        <select id="colorTableCC" class="settingsSelect">
+                            <option value="Default">Default</option>
+                        </select>
+                    </div>
+
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Differential Reflectivity (DF)</div>
+                        <select id="colorTableDF" class="settingsSelect">
+                            <option value="Default">Default</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Alert Colors Tab -->
+                <div class="settingsTabContent" id="tab-alerts">
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Alert Colors</div>
+                        <div class="settingsColorGrid">
+                            <label class="settingsColorItem">Tornado Warning<input type="color" id="alertColor-tor" value="#f0002c"></label>
+                            <label class="settingsColorItem">Severe T-storm Warning<input type="color" id="alertColor-svr" value="#e49b0f"></label>
+                            <label class="settingsColorItem">Flash Flood Warning<input type="color" id="alertColor-ffw" value="#00c537"></label>
+                            <label class="settingsColorItem">Tornado Watch<input type="color" id="alertColor-tow" value="#ffff00"></label>
+                            <label class="settingsColorItem">Severe T-storm Watch<input type="color" id="alertColor-svw" value="#ff8c00"></label>
+                            <label class="settingsColorItem">Special Wx Statement<input type="color" id="alertColor-sws" value="#566573"></label>
+                        </div>
+                    </div>
+
+                    <div class="settingsSection">
+                        <div class="settingsSectionTitle">Alerts Opacity</div>
+                        <div class="settingsRangeRow">
+                            <input type="range" id="alertOpacityRange" class="settingsRange" min="0" max="100" value="100">
+                            <span class="settingsRangeValue" id="alertOpacityValue">100%</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

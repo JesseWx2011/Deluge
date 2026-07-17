@@ -25,6 +25,7 @@ const RADAR_DOT_COLOR_NEXRAD = '#111318';
 
 // Product tracking
 let selectedProduct = "N0B"; // Default to reflectivity
+let lastSelectedProduct = "N0B"; // Remember last selected product for auto-loading
 let currentRadarId = null;
 let currentTrimmedId = null;
 let currentFirstLetter = null;
@@ -114,6 +115,14 @@ function setRadarLayerVisibility(isVisible) {
     }
     if (map.getLayer('radar-image-layer')) {
         map.setLayoutProperty('radar-image-layer', 'visibility', isVisible ? 'visible' : 'none');
+    }
+    // Also hide/show the WebGL radar layer
+    if (window.NexradRenderer && typeof window.NexradRenderer.setVisible === 'function') {
+        window.NexradRenderer.setVisible(isVisible);
+    }
+    // Directly control the nexrad-webgl-layer visibility
+    if (map.getLayer('nexrad-webgl-layer')) {
+        map.setLayoutProperty('nexrad-webgl-layer', 'visibility', isVisible ? 'visible' : 'none');
     }
 }
 
@@ -520,34 +529,34 @@ async function showOutlookMode() {
     }
 }
 
-function showRadarMode() {
-    setOutlookLayerVisibility(false);
-    setRadarLayerVisibility(true);
-    setOutlookPanelVisibility(false);
-}
+    function showRadarMode() {
+        setOutlookLayerVisibility(false);
+        setRadarLayerVisibility(true);
+        setOutlookPanelVisibility(false);
+    }
 
-window.showOutlookMode = showOutlookMode;
-window.showRadarMode = showRadarMode;
-window.modeOutlook = showOutlookMode;
+    window.showOutlookMode = showOutlookMode;
+    window.showRadarMode = showRadarMode;
+    window.modeOutlook = showOutlookMode;
 
 
-if (elProductsList) {
-    elProductsList.addEventListener('click', (event) => {
+    if (elProductsList) {
+        elProductsList.addEventListener('click', (event) => {
 
-        const clickedRow = event.target.closest('.productRow');
-        
-        if (!clickedRow) return;
+            const clickedRow = event.target.closest('.productRow');
+            
+            if (!clickedRow) return;
 
-        const newProductId = clickedRow.dataset.productId;
-        
-        updateRadarProduct(newProductId);
-        
-        elProductsList.querySelectorAll('.productRow').forEach(row => {
-            row.classList.remove('active');
+            const newProductId = clickedRow.dataset.productId;
+            
+            updateRadarProduct(newProductId);
+            
+            elProductsList.querySelectorAll('.productRow').forEach(row => {
+                row.classList.remove('active');
+            });
+            clickedRow.classList.add('active');
         });
-        clickedRow.classList.add('active');
-    });
-}
+    }
 
 async function radars() {
     try {
@@ -770,7 +779,9 @@ function selectRadarSite(radarId) {
     const isStandardRadar = firstLetter === "K" || firstLetter === "P";
     const availableProducts = isStandardRadar ? rad_config.base : rad_config.tdwr;
 
-    selectedProduct = availableProducts[0].id;
+    // Auto-load last selected product if it's available for this radar type, otherwise default to first product
+    const lastProductAvailable = availableProducts.find(p => p.id === lastSelectedProduct);
+    selectedProduct = lastProductAvailable ? lastSelectedProduct : availableProducts[0].id;
 
     if (typeof latestLevelIII === 'function') {
         latestLevelIII(radarId, selectedProduct);
@@ -788,6 +799,11 @@ function selectRadarSite(radarId) {
             row.dataset.productId = product.id;
             row.dataset.productName = product.name;
             row.textContent = product.label;
+            
+            // Mark the selected product as active
+            if (product.id === selectedProduct) {
+                row.classList.add('active');
+            }
             
             fragment.appendChild(row);
         });
@@ -821,80 +837,6 @@ function formatDisplayTime(dateObj) {
     return dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-function getCDTApiString(dateObj) {
-    if (!dateObj || isNaN(dateObj.getTime())) return "0";
-
-    try {
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Chicago',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: false
-        });
-
-        const parts = formatter.formatToParts(dateObj);
-        const partMap = {};
-        for (const part of parts) {
-            if (part.type !== 'literal') {
-                partMap[part.type] = part.value;
-            }
-        }
-
-        let hour = partMap.hour || "0";
-        if (hour === '24') hour = '0';
-        if (hour.length === 2 && hour.startsWith('0')) {
-            hour = hour.slice(1);
-        }
-
-        return `${partMap.year || "2026"}${partMap.month || "01"}${partMap.day || "01"}${hour}${partMap.minute || "00"}`;
-    } catch (e) {
-        return "0";
-    }
-}
-
-async function verifyTileExists(radarCode, product, apiTimestamp) {
-    if (!radarCode || !product || !apiTimestamp || apiTimestamp === "undefined") return false;
-
-    const probeUrl = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::${radarCode}-${product}-${apiTimestamp}/0/0/0.png`;
-
-    try {
-        const response = await fetch(probeUrl, { method: 'HEAD' });
-        return response.ok;
-    } catch (e) {
-        return false;
-    }
-}
-
-async function generateVerifiedFallbackTimeline(radarCode, product) {
-    const candidateFrames = [];
-    const now = new Date();
-    now.setSeconds(0, 0);
-    now.setMinutes(Math.floor(now.getMinutes() / 5) * 5);
-
-    for (let i = 19; i >= 0; i--) {
-        const minutesAgo = i * 5;
-        const dateObj = new Date(now.getTime() - minutesAgo * 60000);
-        const apiValue = getCDTApiString(dateObj);
-
-        candidateFrames.push({
-            apiValue,
-            displayTime: formatDisplayTime(dateObj),
-            labelDetail: i === 0 ? 'Latest' : `-${minutesAgo} min`
-        });
-    }
-
-    const verificationPromises = candidateFrames.map(async (frame) => {
-        const exists = await verifyTileExists(radarCode, product, frame.apiValue);
-        return { ...frame, valid: exists };
-    });
-
-    const results = await Promise.all(verificationPromises);
-    return results;
-}
-
 async function initTimeline(radarCode, product) {
     const activeRadar = radarCode || currentTrimmedId;
     const activeProduct = product || selectedProduct;
@@ -904,31 +846,12 @@ async function initTimeline(radarCode, product) {
         return;
     }
 
-    const url = `https://mesonet.agron.iastate.edu/json/radar.py?operation=list&radar=${activeRadar}&product=${activeProduct}`;
-
-    try {
-        const response = await fetch(url);
-        const json = await response.json();
-
-        if (json && json.scans && json.scans.length > 0) {
-            TIMELINE_DATA = json.scans.map((scan, index, arr) => {
-                const timeString = scan.ts || scan.valid || scan.time || null;
-                const dateObj = timeString ? new Date(timeString) : new Date();
-                const isLatest = index === arr.length - 1;
-
-                return {
-                    apiValue: isLatest ? '0' : getCDTApiString(dateObj),
-                    displayTime: formatDisplayTime(dateObj),
-                    labelDetail: isLatest ? 'Latest' : formatDisplayTime(dateObj)
-                };
-            });
-        } else {
-            TIMELINE_DATA = await generateVerifiedFallbackTimeline(activeRadar, activeProduct);
-        }
-    } catch (error) {
-        console.warn("Radar API metadata fetch failed. Triggering fallback validation system...", error);
-        TIMELINE_DATA = await generateVerifiedFallbackTimeline(activeRadar, activeProduct);
-    }
+    // IEM timeline API removed - only latest scan is supported with WebGL
+    TIMELINE_DATA = [{
+        apiValue: '0',
+        displayTime: 'Latest',
+        labelDetail: 'Latest'
+    }];
 
     setupTimelineUI();
 }
@@ -978,61 +901,23 @@ function updateTimelineDisplay(frameIndex) {
     }
 }
 
+// IEM tileset loading removed - only WebGL rendering is supported
 function loadRadarImage(apiTimestamp) {
-    const radar = typeof currentTrimmedId !== 'undefined' ? currentTrimmedId : '';
-    const product = typeof selectedProduct !== 'undefined' ? selectedProduct : '';
-    const cleanTimestamp = (!apiTimestamp || apiTimestamp === "undefined") ? "0" : apiTimestamp;
-
-    if (!radar || !product) return;
-
-    if (map.getLayer('radar-image-layer')) {
-        map.removeLayer('radar-image-layer');
-    }
-
-    if (map.getSource('radar-image')) {
-        map.removeSource('radar-image');
-    }
-
-    const radarImageUrl = `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::${radar}-${product}-${cleanTimestamp}/{z}/{x}/{y}.png`;
-
-    map.addSource('radar-image', {
-        'type': 'raster',
-        'tiles': [radarImageUrl],
-        'tileSize': 256,
-        'attribution': 'Iowa State University'
-    }, 'road-minor');
-
-    map.addLayer({
-        'id': 'radar-image-layer',
-        'type': 'raster',
-        'source': 'radar-image',
-        'paint': {
-            'raster-opacity': (typeof window.radarOpacity === 'number') ? window.radarOpacity : 1
-        }
-    }, 'alerts-outline');
+    console.warn('[Deluge] IEM tileset loading removed - use WebGL rendering only');
 }
 
 // Digital base products we currently know how to parse and render via the
 // Level III WebGL path. The real source of truth is nexrad.js's
 // RADAR_PRODUCT_MAP; this hardcoded list is only a fallback for the (very
 // small) window before nexrad.js's module script has finished executing.
-// Anything not in this set (e.g. NET/Echo Tops) always goes straight to the
-// IEM raster tiles.
 const NEXRAD_WEBGL_FALLBACK_PRODUCTS = ['N0B', 'N0G', 'N0C', 'N0K', 'TZ0', 'TZ1', 'TZ2', 'TV0', 'TV1', 'TV2', 'TZL'];
 
 function getWebglSupportedProducts() {
     return window.RADAR_PRODUCT_MAP ? Object.keys(window.RADAR_PRODUCT_MAP) : NEXRAD_WEBGL_FALLBACK_PRODUCTS;
 }
 
-// Tries the WebGL Level III render for the current radar/product, and falls
-// back to the existing IEM raster tile loader (loadRadarImage) if the
-// WebGL path isn't applicable or throws for any reason (fetch failure,
-// unsupported/compressed product, parse error, etc).
-//
-// NOTE: the WebGL path currently only covers the *latest* scan. Scrubbing to
-// an older timeline frame still uses the IEM tiles, since fetching/parsing
-// the matching historical Level III file per timeline frame is a separate
-// piece of work from getting the latest scan plotting correctly.
+// Tries the WebGL Level III render for the current radar/product.
+// NOTE: the WebGL path currently only covers the *latest* scan.
 async function loadRadarFrame(apiTimestamp) {
     const cleanTimestamp = (!apiTimestamp || apiTimestamp === "undefined") ? "0" : apiTimestamp;
     const isLatestFrame = cleanTimestamp === "0";
@@ -1053,17 +938,15 @@ async function loadRadarFrame(apiTimestamp) {
             console.info(`[Deluge] Rendered ${selectedProduct} for ${currentRadarId} via the WebGL Level III parser.`);
             return;
         } catch (error) {
-            console.warn('[Deluge] WebGL radar render failed, falling back to IEM tiles:', error);
+            console.warn('[Deluge] WebGL radar render failed:', error);
             if (window.NexradRenderer) window.NexradRenderer.setVisible(false);
         }
     } else if (window.NexradRenderer) {
         window.NexradRenderer.setVisible(false);
     }
 
-    if (map.getLayer('radar-image-layer')) {
-        map.setLayoutProperty('radar-image-layer', 'visibility', 'visible');
-    }
-    loadRadarImage(cleanTimestamp);
+    // IEM tileset fallback removed - only WebGL rendering is supported
+    console.warn('[Deluge] Unable to render radar - WebGL rendering failed or product not supported');
 }
 
 if (timelineSlider) {
@@ -1084,12 +967,12 @@ if (timelineSlider) {
 // Function to update radar product (called from animation.js when product is selected)
 function updateRadarProduct(productId) {
     selectedProduct = productId;
+    lastSelectedProduct = productId; // Remember this for future radar selections
     if (elSelectedProduct) elSelectedProduct.textContent = getProductName(productId);
 
+    // Only attempt to load timeline/frames if a radar site is actually selected
     if (currentTrimmedId) {
         initTimeline(currentTrimmedId, productId);
-    } else {
-        loadRadarFrame();
     }
 }
 

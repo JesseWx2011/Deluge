@@ -747,17 +747,57 @@ function addAlertsLayer(alertData) {
 
     ensureRadarLayerOrder();
 
-    // Handle alert polygon clicks — open the full alert modal
+    // Handle alert polygon clicks — show popup first, click info icon for full modal
     map.on('click', 'alerts-layer', (e) => {
         if (e.features.length > 0) {
-            openAlertModal(e.features[0].properties);
+            const properties = e.features[0].properties;
+            const popupHtml = buildAlertPopup(properties);
+            
+            new mapboxgl.Popup({ 
+                closeButton: true, 
+                className: 'alertMapboxPopup',
+                maxWidth: '320px'
+            })
+            .setLngLat(e.lngLat)
+            .setHTML(popupHtml)
+            .addTo(map);
+            
+            // Add click handler to info icon to open full modal
+            setTimeout(() => {
+                const infoIcon = document.querySelector('.alertPopupInfo');
+                if (infoIcon) {
+                    infoIcon.addEventListener('click', () => {
+                        openAlertModal(properties);
+                    });
+                }
+            }, 100);
         }
     });
 
     // Handle alert outline clicks as well
     map.on('click', 'alerts-outline', (e) => {
         if (e.features.length > 0) {
-            openAlertModal(e.features[0].properties);
+            const properties = e.features[0].properties;
+            const popupHtml = buildAlertPopup(properties);
+            
+            new mapboxgl.Popup({ 
+                closeButton: true, 
+                className: 'alertMapboxPopup',
+                maxWidth: '320px'
+            })
+            .setLngLat(e.lngLat)
+            .setHTML(popupHtml)
+            .addTo(map);
+            
+            // Add click handler to info icon to open full modal
+            setTimeout(() => {
+                const infoIcon = document.querySelector('.alertPopupInfo');
+                if (infoIcon) {
+                    infoIcon.addEventListener('click', () => {
+                        openAlertModal(properties);
+                    });
+                }
+            }, 100);
         }
     });
 
