@@ -77,75 +77,85 @@ button {
 
 .productDrawer {
     position: absolute;
-    bottom: 5px;
+    bottom: 20px;
     left: 20px;
     width: auto;
-    max-width: 25vw;
-    max-height: 50px;
+    min-width: 300px;
+    max-width: 420px;
+    max-height: 52px;
     z-index: 1000;
-    background: linear-gradient(135deg, var(--trietary-color) 0%, #000d5c 100%);
-    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(0, 6, 75, 0.95) 0%, rgba(0, 13, 92, 0.95) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 16px;
     color: white;
     font-family: 'Inter', sans-serif;
-    font-weight: 800;
-    padding: 12px 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(34, 41, 255, 0.3);
-    transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+    font-weight: 600;
+    padding: 14px 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(34, 41, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
 }
 
 .productDrawer:hover {
-    box-shadow: 0 12px 48px rgba(34, 41, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    border-color: rgba(34, 41, 255, 0.6);
+    box-shadow: 0 12px 40px rgba(34, 41, 255, 0.25), 0 0 0 1px rgba(34, 41, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
 }
 
 .productDrawer.expanded {
-    max-height: 280px;
+    max-height: 420px;
     overflow-y: auto;
+    min-width: 340px;
+    padding: 18px 20px;
 }
 
 .productDrawer.expanded .products {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-top: 12px;
-    animation: revealContents 0.4s ease forwards;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    animation: revealContents 0.3s ease forwards;
 }
 
 .productDrawer::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
 }
 
 .productDrawer::-webkit-scrollbar-track {
-    background: rgba(34, 41, 255, 0.1);
-    border-radius: 10px;
+    background: rgba(34, 41, 255, 0.05);
+    border-radius: 4px;
 }
 
 .productDrawer::-webkit-scrollbar-thumb {
-    background: rgba(34, 41, 255, 0.5);
-    border-radius: 10px;
-    transition: background 0.3s ease;
+    background: rgba(34, 41, 255, 0.4);
+    border-radius: 4px;
+    transition: background 0.2s ease;
 }
 
 .productDrawer::-webkit-scrollbar-thumb:hover {
-    background: rgba(34, 41, 255, 0.8);
+    background: rgba(34, 41, 255, 0.6);
 }
 
 .radarSiteName,
 .productSelected {
-    font-size: 0.95rem;
-    letter-spacing: 0.5px;
+    font-size: 0.9rem;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
 }
 
 .radarTypeDot {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background-color: #111318;
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
     flex-shrink: 0;
-    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    transition: all 0.2s ease;
 }
 
 .radarTypeDot.tdwr {
@@ -171,29 +181,31 @@ button {
 }
 
 .productRow {
-    padding: 10px 12px;
+    padding: 12px 14px;
     border-radius: 8px;
-    background-color: rgba(34, 41, 255, 0.2);
-    border: 1px solid rgba(34, 41, 255, 0.4);
+    background-color: rgba(34, 41, 255, 0.15);
+    border: 1px solid rgba(34, 41, 255, 0.3);
     cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
+    letter-spacing: 0.3px;
 }
 
 .productRow:hover {
-    background-color: rgba(34, 41, 255, 0.4);
-    border-color: rgba(34, 41, 255, 0.8);
-    transform: translateX(4px);
+    background-color: rgba(34, 41, 255, 0.35);
+    border-color: rgba(34, 41, 255, 0.6);
+    transform: translateX(2px);
 }
 
 .productRow.selected {
     background-color: var(--primary-color);
     border-color: var(--primary-color);
-    box-shadow: 0 4px 12px rgba(34, 41, 255, 0.5);
+    box-shadow: 0 4px 12px rgba(34, 41, 255, 0.4);
+    font-weight: 600;
 }
 
 .right-ui {
@@ -931,6 +943,10 @@ a.outlookCityName::after {
     border-top: 1px solid rgba(255, 255, 255, 0.15);
 }
 
+.timelineContainer.hidden {
+    display: none;
+}
+
 .timelineLabel {
     font-family: 'Inter', sans-serif;
     font-size: 0.75rem;
@@ -969,9 +985,8 @@ a.outlookCityName::after {
 }
 
 .timelineTicks {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
+    position: relative;
+    height: 20px;
     font-family: 'Montserrat', sans-serif;
     font-size: 0.65rem;
     opacity: 0.7;

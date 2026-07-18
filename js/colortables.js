@@ -18,5 +18,8 @@ const colortables = {
     },
     "Correlation Coeffecient": {
         "Default": "../json/colortables/CC/Default.pal"
+    },
+    "Digital Precipitation": {
+        "Default": "../json/colortables/DTA/Default.pal"
     }
 }

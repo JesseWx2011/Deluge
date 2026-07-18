@@ -16,6 +16,7 @@ const colorTableReflectivity = document.getElementById("colorTableReflectivity")
 const colorTableVelocity = document.getElementById("colorTableVelocity");
 const colorTableCC = document.getElementById("colorTableCC");
 const colorTableDF = document.getElementById("colorTableDF");
+const colorTableDTA = document.getElementById("colorTableDTA");
 const outlookBorderWidthRange = document.getElementById("outlookBorderWidthRange");
 const outlookBorderWidthValue = document.getElementById("outlookBorderWidthValue");
 const outlookBorderOpacityRange = document.getElementById("outlookBorderOpacityRange");
@@ -31,7 +32,8 @@ window.colorTables = {
     reflectivity: 'Radarscope',
     velocity: 'IEM',
     cc: 'Default',
-    df: 'Default'
+    df: 'Default',
+    dta: 'Default'
 };
 
 // ----- Settings Persistence -----
@@ -90,6 +92,9 @@ function loadSettings() {
             }
             if (colorTableDF && settings.colorTables.df) {
                 colorTableDF.value = settings.colorTables.df;
+            }
+            if (colorTableDTA && settings.colorTables.dta) {
+                colorTableDTA.value = settings.colorTables.dta;
             }
         }
         
@@ -215,6 +220,7 @@ function getProductType(product) {
     if (['N0G', 'TV0', 'TV1', 'TV2'].includes(product)) return 'velocity';
     if (product === 'N0C') return 'cc';
     if (product === 'N0K') return 'df';
+    if (product === 'DTA') return 'dta';
     return 'reflectivity'; // Default
 }
 
@@ -255,6 +261,17 @@ if (colorTableCC) {
 if (colorTableDF) {
     colorTableDF.addEventListener("change", (event) => {
         window.colorTables.df = event.target.value;
+        saveSettings();
+        // Reload radar with new color table if a radar site is selected
+        if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {
+            loadRadarFrame('0');
+        }
+    });
+}
+
+if (colorTableDTA) {
+    colorTableDTA.addEventListener("change", (event) => {
+        window.colorTables.dta = event.target.value;
         saveSettings();
         // Reload radar with new color table if a radar site is selected
         if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {

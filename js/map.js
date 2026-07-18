@@ -34,7 +34,6 @@ window.currentRadarId = null;
 const timelineSlider = document.getElementById("timelineSlider");
 const timelineTicks = document.getElementById("timelineTicks");
 const timelineLabel = document.getElementById("timelineLabel");
-let TIMELINE_DATA = [];
 
 const map = new mapboxgl.Map({
     accessToken: 'pk.eyJ1IjoiaGFzdHl0dWJlIiwiYSI6ImNsa2hkZTh6bzAwazQzZHFyNmF5aTRsZGwifQ.5QJvYIHo0odZ5jCFApV7yw',
@@ -552,9 +551,13 @@ async function showOutlookMode() {
             updateRadarProduct(newProductId);
             
             elProductsList.querySelectorAll('.productRow').forEach(row => {
-                row.classList.remove('active');
+                row.classList.remove('selected');
             });
-            clickedRow.classList.add('active');
+            clickedRow.classList.add('selected');
+
+            if (typeof window.collapseProductDrawer === 'function') {
+                window.collapseProductDrawer();
+            }
         });
     }
 
@@ -741,6 +744,10 @@ function selectRadarSite(radarId) {
     currentFirstLetter = firstLetter;
     window.currentRadarId = radarId;
 
+    if (typeof window.clearRadarLayers === 'function') {
+        window.clearRadarLayers();
+    }
+
     if (typeof radarMsg === 'function') {
         radarMsg();
     }
@@ -761,8 +768,9 @@ function selectRadarSite(radarId) {
             { id: "N0G", name: "NEXRAD Super-Res Velocity", label: "Base Velocity" },
             { id: "N0C", name: "NEXRAD Correlation Coefficient", label: "Corr. Coefficient" },
             { id: "N0K", name: "NEXRAD Differential Reflectivity", label: "Diff. Reflectivity" },
+            { id: "DTA", name: "Digital Precipitation", label: "Storm Accumulation"},
             // Not in nexrad.js's RADAR_PRODUCT_MAP, so this one always falls
-            // straight through to the IEM raster tiles (see loadRadarFrame).
+            // straight through to the IEM raster tiles.
             { id: "NET", name: "Echo Tops", label: "Echo Tops" }
         ],
         tdwr: [
@@ -787,7 +795,32 @@ function selectRadarSite(radarId) {
         latestLevelIII(radarId, selectedProduct);
     }
 
+    window.currentSelectedProduct = selectedProduct;
+
     if (elSelectedProduct) elSelectedProduct.textContent = getProductName(selectedProduct);
+
+    // Render the new site's latest frame right away, so picking a radar
+    // site always resets the view to "now" instead of leaving the old
+    // site's frame on screen until the preload/timeline catches up.
+    if (typeof window.tryRenderNexradWebGL === 'function') {
+        window.tryRenderNexradWebGL(radarId, selectedProduct);
+    }
+
+    // Preload the last 5 radar frames for timeline functionality, now that
+    // selectedProduct actually reflects the new site (not the previous one).
+    if (window.preloadedRadarFrames) {
+        window.preloadedRadarFrames.clear();
+        if (timelineTicks) timelineTicks.innerHTML = '';
+        if (timelineSlider) timelineSlider.value = 0;
+        if (timelineLabel) timelineLabel.textContent = 'Latest';
+    }
+    if (typeof window.preloadRadarFrames === 'function') {
+        window.preloadRadarFrames(radarId, selectedProduct).then(() => {
+            if (typeof window.updateTimelineTicks === 'function') {
+                window.updateTimelineTicks();
+            }
+        });
+    }
 
     if (elProductsList) {
         elProductsList.innerHTML = ''; // Clear out the old list
@@ -802,7 +835,7 @@ function selectRadarSite(radarId) {
             
             // Mark the selected product as active
             if (product.id === selectedProduct) {
-                row.classList.add('active');
+                row.classList.add('selected');
             }
             
             fragment.appendChild(row);
@@ -810,8 +843,6 @@ function selectRadarSite(radarId) {
 
         elProductsList.appendChild(fragment);
     }
-
-    initTimeline(trimmedId, selectedProduct);
 
     if (map.getLayer('radar')) {
         // Keep the fill color driven by station type (TDWR = yellow, NEXRAD
@@ -832,147 +863,49 @@ function selectRadarSite(radarId) {
     }
 }
 
-function formatDisplayTime(dateObj) {
-    if (!dateObj || isNaN(dateObj.getTime())) return "00:00";
-    return dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-async function initTimeline(radarCode, product) {
-    const activeRadar = radarCode || currentTrimmedId;
-    const activeProduct = product || selectedProduct;
-
-    if (!activeRadar || !activeProduct) {
-        console.warn("initTimeline: Missing radar identifier or product parameters.");
-        return;
-    }
-
-    // IEM timeline API removed - only latest scan is supported with WebGL
-    TIMELINE_DATA = [{
-        apiValue: '0',
-        displayTime: 'Latest',
-        labelDetail: 'Latest'
-    }];
-
-    setupTimelineUI();
-}
-
-function setupTimelineUI() {
-    if (!timelineSlider || !TIMELINE_DATA || TIMELINE_DATA.length === 0) return;
-
-    timelineSlider.max = TIMELINE_DATA.length - 1;
-    buildTimelineTicks();
-
-    const defaultIndex = TIMELINE_DATA.length - 1;
-    updateTimelineDisplay(defaultIndex);
-
-    if (TIMELINE_DATA[defaultIndex]) {
-        loadRadarFrame(TIMELINE_DATA[defaultIndex].apiValue);
-    }
-}
-
-function buildTimelineTicks() {
-    if (!timelineTicks || TIMELINE_DATA.length === 0) return;
-    timelineTicks.innerHTML = '';
-
-    const step = Math.max(1, Math.floor(TIMELINE_DATA.length / 4));
-
-    for (let i = 0; i < TIMELINE_DATA.length; i += step) {
-        const frame = TIMELINE_DATA[i];
-        if (!frame) continue;
-        const tick = document.createElement('span');
-        tick.className = 'timelineTick';
-        tick.textContent = frame.displayTime || "";
-        timelineTicks.appendChild(tick);
-    }
-}
-
-function updateTimelineDisplay(frameIndex) {
-    const frame = TIMELINE_DATA[frameIndex];
-    if (!frame) return;
-
-    if (timelineLabel) {
-        timelineLabel.textContent = frame.labelDetail === 'Latest'
-            ? 'Latest'
-            : `${frame.displayTime} (${frame.labelDetail})`;
-    }
-
-    if (timelineSlider) {
-        timelineSlider.value = frameIndex;
-    }
-}
-
 // IEM tileset loading removed - only WebGL rendering is supported
 function loadRadarImage(apiTimestamp) {
     console.warn('[Deluge] IEM tileset loading removed - use WebGL rendering only');
 }
 
-// Digital base products we currently know how to parse and render via the
-// Level III WebGL path. The real source of truth is nexrad.js's
-// RADAR_PRODUCT_MAP; this hardcoded list is only a fallback for the (very
-// small) window before nexrad.js's module script has finished executing.
-const NEXRAD_WEBGL_FALLBACK_PRODUCTS = ['N0B', 'N0G', 'N0C', 'N0K', 'TZ0', 'TZ1', 'TZ2', 'TV0', 'TV1', 'TV2', 'TZL'];
-
-function getWebglSupportedProducts() {
-    return window.RADAR_PRODUCT_MAP ? Object.keys(window.RADAR_PRODUCT_MAP) : NEXRAD_WEBGL_FALLBACK_PRODUCTS;
-}
-
-// Tries the WebGL Level III render for the current radar/product.
-// NOTE: the WebGL path currently only covers the *latest* scan.
-async function loadRadarFrame(apiTimestamp) {
-    const cleanTimestamp = (!apiTimestamp || apiTimestamp === "undefined") ? "0" : apiTimestamp;
-    const isLatestFrame = cleanTimestamp === "0";
-    const canTryWebGL = isLatestFrame &&
-        currentRadarId &&
-        getWebglSupportedProducts().includes(selectedProduct) &&
-        typeof window.tryRenderNexradWebGL === 'function';
-
-    if (canTryWebGL) {
-        try {
-            await window.tryRenderNexradWebGL(currentRadarId, selectedProduct);
-
-            if (window.NexradRenderer) window.NexradRenderer.setVisible(true);
-            if (map.getLayer('radar-image-layer')) {
-                map.setLayoutProperty('radar-image-layer', 'visibility', 'none');
-            }
-
-            console.info(`[Deluge] Rendered ${selectedProduct} for ${currentRadarId} via the WebGL Level III parser.`);
-            return;
-        } catch (error) {
-            console.warn('[Deluge] WebGL radar render failed:', error);
-            if (window.NexradRenderer) window.NexradRenderer.setVisible(false);
-        }
-    } else if (window.NexradRenderer) {
-        window.NexradRenderer.setVisible(false);
-    }
-
-    // IEM tileset fallback removed - only WebGL rendering is supported
-    console.warn('[Deluge] Unable to render radar - WebGL rendering failed or product not supported');
-}
-
 if (timelineSlider) {
     timelineSlider.addEventListener('click', (e) => e.stopPropagation());
     timelineSlider.addEventListener('mousedown', (e) => e.stopPropagation());
-
-    timelineSlider.addEventListener('input', (e) => {
-        const frameIndex = parseInt(e.target.value, 10);
-        updateTimelineDisplay(frameIndex);
-
-        const frame = TIMELINE_DATA[frameIndex];
-        if (frame) {
-            loadRadarFrame(frame.apiValue);
-        }
-    });
 }
 
-// Function to update radar product (called from animation.js when product is selected)
+// Function to update radar product (called when a product row is clicked).
+// This is the single place product switches happen: it renders the new
+// product's latest frame right away, then repopulates the preloaded-frame
+// cache so the timeline slider has something to scrub through.
 function updateRadarProduct(productId) {
     selectedProduct = productId;
     lastSelectedProduct = productId; // Remember this for future radar selections
+    window.currentSelectedProduct = productId;
     if (elSelectedProduct) elSelectedProduct.textContent = getProductName(productId);
 
-    // Only attempt to load timeline/frames if a radar site is actually selected
-    if (currentTrimmedId) {
-        initTimeline(currentTrimmedId, productId);
+    if (typeof window.clearRadarLayers === 'function') {
+        window.clearRadarLayers();
+    }
+
+    if (window.preloadedRadarFrames) {
+        window.preloadedRadarFrames.clear();
+        if (timelineTicks) timelineTicks.innerHTML = '';
+        if (timelineSlider) timelineSlider.value = 0;
+        if (timelineLabel) timelineLabel.textContent = 'Latest';
+    }
+
+    if (!currentRadarId) return;
+
+    if (typeof window.tryRenderNexradWebGL === 'function') {
+        window.tryRenderNexradWebGL(currentRadarId, productId);
+    }
+
+    if (typeof window.preloadRadarFrames === 'function') {
+        window.preloadRadarFrames(currentRadarId, productId).then(() => {
+            if (typeof window.updateTimelineTicks === 'function') {
+                window.updateTimelineTicks();
+            }
+        });
     }
 }
 

@@ -385,6 +385,16 @@
       "type": "Feature",
       "geometry": { "type": "Point", "coordinates": [-116.2034255, 43.6160406] },
       "properties": { "city": "Boise", "state": "ID" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-74.0061, 40.7128] },
+      "properties": { "city": "New York", "state": "NY" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-77.016389, 38.904722] },
+      "properties": { "city": "Washington", "state": "D.C." }
     }
   ]
 }
