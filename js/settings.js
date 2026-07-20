@@ -228,35 +228,41 @@ async function updateColorbar(productId) {
     
     colortable.style.backgroundImage = gradient;
     
-    // Calculate proper tick increments - always count by 10
-    const rangeSpan = range.max - range.min;
-    const tickCount = 6;
-    
     // Always use increments of 10
     const niceStep = 10;
+    let intermediateTicks = [];
     
-    // Calculate the first tick that aligns with 10
-    const firstTick = Math.ceil(range.min / 10) * 10;
+    // Calculate the first tick that aligns with 10 strictly greater than min
+    let currentTick = Math.ceil(range.min / 10) * 10;
+    if (currentTick === range.min) currentTick += niceStep;
     
-    // Generate ticks
-    let tickHtml = '';
-    let currentTick = firstTick;
-    let tickIndex = 0;
-    
-    while (currentTick <= range.max && tickIndex < tickCount) {
-        tickHtml += `<ul>${Math.round(currentTick)}</ul>`;
+    // Get every 10th value up to strictly less than max
+    while (currentTick < range.max) {
+        intermediateTicks.push(currentTick);
         currentTick += niceStep;
-        tickIndex++;
     }
     
-    // If we didn't get enough ticks, fill in from the end
-    if (tickIndex < tickCount) {
-        tickHtml = '';
-        for (let i = 0; i < tickCount; i++) {
-            const value = range.min + (rangeSpan * i / (tickCount - 1));
-            tickHtml += `<ul>${Math.round(value)}</ul>`;
+    // If there are too many intermediate ticks, thin them out (reserving spots for min & max)
+    if (intermediateTicks.length > 8) {
+        const skipInterval = Math.ceil(intermediateTicks.length / 8);
+        const reducedTicks = [];
+        for (let i = 0; i < intermediateTicks.length; i += skipInterval) {
+            reducedTicks.push(intermediateTicks[i]);
         }
+        intermediateTicks = reducedTicks;
     }
+    
+    // Combine the absolute min, the calculated intermediate ticks, and the absolute max
+    let tickValues = [range.min, ...intermediateTicks];
+    if (range.max > range.min) {
+        tickValues.push(range.max);
+    }
+    
+    // Generate tick HTML
+    let tickHtml = '';
+    tickValues.forEach(val => {
+        tickHtml += `<ul>${Math.round(val)}</ul>`;
+    });
     
     ticks.innerHTML = tickHtml;
     
@@ -301,7 +307,7 @@ function initColorbarHover() {
         const y = e.clientY - rect.top;
         const percentage = 1 - (y / rect.height); // Invert because gradient goes bottom to top
         
-        const range = window.currentColorbarRange || { min: -20, max: 75, unit: 'dBZ' };
+        const range = window.currentColorbarRange || { min: -20, max: 89.9, unit: 'dBZ' }; // For some weird reason, I have to set it to 89.9 instead of 90.0 because then the tooltip value shows 90.1, which makes the whole thing slightly off. This code block will be fully corrected at a later point in development.
         const value = range.min + (percentage * (range.max - range.min));
         
         tooltip.textContent = `${value.toFixed(1)} ${range.unit}`;
