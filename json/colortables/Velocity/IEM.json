@@ -1,0 +1,10 @@
+{
+    "productName": "Velocity",
+    "note": "Base Storm Relative Velocity from IEM. The Last Color (purple, #7f00cf) is Range Folded, RF for short.",
+    "gradient": "linear-gradient(to top, #fc0084, #550599, #2077c0, #26b7d5, #75e7ea, #a7f1da, #2efc34, #03c303, #029202, #4e794c, #8a7676, #85454f, #9a0002, #e30006, #fb5782, #fe89cc, #ffe1a8, #ffa462, #e06f3f, #b54a2a, #942d19, #670602, #7f00cf)",
+    "min": -120,
+    "max": 120,
+    "unit": "kts",
+  "courtesy": "Original by IEM (Daryl Herzmann). Recreation by JesseWx2011.",
+  "modifiedDate": "06/24/2026"
+}

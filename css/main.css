@@ -3,11 +3,64 @@
     --secondary-color: #f3f3f3;
     --trietary-color: #00064b;
     --main-font: 'Rubik', sans-serif;
+    --accent-gradient: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+    --glass-bg: rgba(0, 0, 0, 0.85);
+    --glass-border: rgba(34, 41, 255, 0.2);
+    --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.5);
+    --shadow-glow: 0 0 20px rgba(34, 41, 255, 0.3);
 }
 
 html, body {
     scrollbar-width: none;
     font-family: var(--main-font);
+}
+
+.loadingOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #000000 0%, #00064b 50%, #000000 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+
+.loadingOverlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.loadingSpinner {
+    width: 60px;
+    height: 60px;
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #2229ff;
+    border-right-color: #1e40af;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    box-shadow: 0 0 30px rgba(34, 41, 255, 0.4);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loadingText {
+    margin-top: 24px;
+    color: white;
+    font-family: 'Rubik', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    opacity: 0.9;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 i {
@@ -52,14 +105,18 @@ button {
   width: 45%;
   height: 8vh;
   top: 15px;
-  background-color: black;
-  border-radius: 10px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
   flex-direction: row;
   align-items: center;
   justify-content: space-evenly;
   margin: 0 auto;
   animation: openUp 0.6s ease forwards;
   font-family: 'Montserrat', sans-serif;
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
 .top-ui button {
@@ -84,22 +141,24 @@ button {
     max-width: 420px;
     max-height: 52px;
     z-index: 1000;
-    background: linear-gradient(135deg, rgba(0, 6, 75, 0.95) 0%, rgba(0, 13, 92, 0.95) 100%);
+    background: var(--glass-bg);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
     border-radius: 16px;
     color: white;
     font-family: 'Inter', sans-serif;
     font-weight: 600;
     padding: 14px 20px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(34, 41, 255, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
 }
 
 .productDrawer:hover {
-    box-shadow: 0 12px 40px rgba(34, 41, 255, 0.25), 0 0 0 1px rgba(34, 41, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    transform: translateY(-1px);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 30px rgba(34, 41, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    border-color: rgba(34, 41, 255, 0.5);
 }
 
 .productDrawer.expanded {
@@ -117,6 +176,188 @@ button {
     padding-top: 20px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     animation: revealContents 0.3s ease forwards;
+}
+
+.tiltDropdown {
+    position: relative;
+}
+
+.tiltSelect {
+    background: rgba(34, 41, 255, 0.15);
+    border: 1px solid rgba(34, 41, 255, 0.3);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: white;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.75rem;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.tiltSelect:hover {
+    background: rgba(34, 41, 255, 0.25);
+    border-color: rgba(34, 41, 255, 0.5);
+}
+
+.tiltSelect option {
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+}
+
+.toolsSection {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.toolsLabel {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 8px;
+}
+
+.toolsContainer {
+    display: flex;
+    gap: 8px;
+}
+
+.toolButton {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.toolButton:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(34, 41, 255, 0.5);
+}
+
+.toolButton.active {
+    background: rgba(34, 41, 255, 0.3);
+    border-color: rgba(34, 41, 255, 0.8);
+}
+
+.toolButton i {
+    font-size: 1.1rem;
+}
+
+.drawControls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.drawControlRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.drawControlLabel {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 60px;
+}
+
+.drawColorPicker {
+    width: 40px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.drawColorPicker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.drawColorPicker::-webkit-color-swatch {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+}
+
+.drawThicknessSlider {
+    flex: 1;
+    height: 4px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(34, 41, 255, 0.3);
+    border-radius: 10px;
+    outline: none;
+    cursor: pointer;
+}
+
+.drawThicknessSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    border: 2px solid white;
+    cursor: pointer;
+}
+
+.drawThicknessSlider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    border: 2px solid white;
+    cursor: pointer;
+}
+
+.drawThicknessValue {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #8fa1ff;
+    min-width: 30px;
+    text-align: right;
+}
+
+.drawClearButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 8px;
+    color: #fca5a5;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.drawClearButton:hover {
+    background: rgba(239, 68, 68, 0.4);
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+.drawClearButton i {
+    font-size: 0.85rem;
 }
 
 .productDrawer::-webkit-scrollbar {
@@ -183,7 +424,7 @@ button {
 .productRow {
     padding: 12px 14px;
     border-radius: 8px;
-    background-color: rgba(34, 41, 255, 0.15);
+    background: rgba(34, 41, 255, 0.15);
     border: 1px solid rgba(34, 41, 255, 0.3);
     cursor: pointer;
     font-size: 0.85rem;
@@ -196,14 +437,15 @@ button {
 }
 
 .productRow:hover {
-    background-color: rgba(34, 41, 255, 0.35);
+    background: rgba(34, 41, 255, 0.35);
     border-color: rgba(34, 41, 255, 0.6);
     transform: translateX(2px);
+    box-shadow: 0 4px 12px rgba(34, 41, 255, 0.2);
 }
 
 .productRow.selected {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
+    background: var(--accent-gradient);
+    border-color: #2229ff;
     box-shadow: 0 4px 12px rgba(34, 41, 255, 0.4);
     font-weight: 600;
 }
@@ -215,30 +457,92 @@ button {
 }
 
 .colortable {
-    border-radius: 10px;
-    border: 4px solid white;
-    width: 25px;
+    border-radius: 12px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    width: 28px;
     height: 80vh;
-    background-image: linear-gradient(to top, #969153, #cacdaa, #919ab4, #415b9e, #21c034, #0da212, #ffe200, #ff0000, #ffffff, #b200ff, #05ecf0, #012020)
+    background-image: linear-gradient(to top, #969153, #cacdaa, #919ab4, #415b9e, #21c034, #0da212, #ffe200, #ff0000, #ffffff, #b200ff, #05ecf0, #012020);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    cursor: crosshair;
+    position: relative;
+}
+
+.colortable-tooltip {
+    position: absolute;
+    right: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: white;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+}
+
+.colortable:hover .colortable-tooltip {
+    opacity: 1;
+}
+
+.alertPropertyChart {
+    width: 100%;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    margin-top: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.alertPropertyChartBar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.alertPropertyChartLabel {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .tickMarks {
     color: white;
     position: absolute;
-    right: 50px;
+    right: 55px;
     top: 10px;
     height: 81vh;
     row-gap: 1px;
     display: flex;
     justify-content: space-between;
     font-family: 'Montserrat', sans-serif;
-    font-weight: 900;
+    font-weight: 700;
     flex-direction: column-reverse;
-    text-shadow: 4px 4px 4px black;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    font-size: 0.75rem;
+    pointer-events: none;
 }
 
 .colortable:hover {
-    animation: borderGradient 3s infinite linear;
+    box-shadow: 0 0 20px rgba(34, 41, 255, 0.5);
+    border-color: rgba(34, 41, 255, 0.6);
 }
 
 /* ----------------------- Top-right options menu ----------------------- */
@@ -253,13 +557,20 @@ button {
 .menuButton {
     width: 45px;
     height: 45px;
-    border-radius: 10px;
-    background-color: black;
+    border-radius: 12px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
     color: #f3f3f3;
+    box-shadow: var(--shadow-lg);
+    transition: all 0.3s ease;
 }
 
 .menuButton:hover {
-    background-color: var(--trietary-color);
+    background: rgba(34, 41, 255, 0.3);
+    border-color: rgba(34, 41, 255, 0.5);
+    box-shadow: var(--shadow-glow);
 }
 
 .menuDropdown {
@@ -267,14 +578,16 @@ button {
     top: 55px;
     right: 0;
     width: 220px;
-    background: linear-gradient(135deg, var(--trietary-color) 0%, #000d5c 100%);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
     border-radius: 12px;
     color: white;
     font-family: 'Inter', sans-serif;
     font-weight: 600;
     padding: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(34, 41, 255, 0.3);
+    box-shadow: var(--shadow-lg);
     display: none;
     flex-direction: column;
     gap: 6px;
@@ -293,12 +606,13 @@ button {
     border-radius: 8px;
     font-size: 0.85rem;
     cursor: pointer;
-    background-color: rgba(34, 41, 255, 0.15);
-    transition: background-color 0.2s ease;
+    background: rgba(34, 41, 255, 0.15);
+    transition: all 0.2s ease;
 }
 
 .menuItem:hover {
-    background-color: rgba(34, 41, 255, 0.35);
+    background: rgba(34, 41, 255, 0.35);
+    border-color: rgba(34, 41, 255, 0.5);
 }
 
 .menuItem span {
@@ -388,10 +702,12 @@ button {
 }
 
 .settingsModal {
-    background: linear-gradient(135deg, rgba(30, 27, 75, 0.98) 0%, rgba(0, 13, 92, 0.98) 100%);
+    background: var(--glass-bg);
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
     border-radius: 20px;
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(34, 41, 255, 0.2);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
     max-width: 450px;
     width: 100%;
     max-height: 85vh;
@@ -791,11 +1107,12 @@ a.outlookCityName::after {
     left: 16px;
     min-width: 260px;
     max-width: 320px;
-    background: #121a24;
-    color: #e8f1f8;
-    border: 1px solid #1f2d3a;
-    border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
     z-index: 1000;
     user-select: none;
     font-family: var(--main-font);
@@ -813,7 +1130,7 @@ a.outlookCityName::after {
   }
  
   .tl-ui-header:hover {
-    background: #17212c;
+    background: rgba(34, 41, 255, 0.15);
   }
 
   .tl-ui-title {
@@ -825,14 +1142,14 @@ a.outlookCityName::after {
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    border: none;
-    background-color: rgba(79, 209, 255, 0.12);
+    border: 1px solid rgba(79, 209, 255, 0.3);
+    background: rgba(79, 209, 255, 0.12);
     color: #4fd1ff;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease;
   }
 
   .tl-ui-layers-btn i {
@@ -840,7 +1157,9 @@ a.outlookCityName::after {
   }
 
   .tl-ui-layers-btn:hover {
-    background-color: rgba(79, 209, 255, 0.28);
+    background: rgba(79, 209, 255, 0.28);
+    border-color: rgba(79, 209, 255, 0.5);
+    box-shadow: 0 0 12px rgba(79, 209, 255, 0.3);
   }
  
   .tl-ui-arrow {
@@ -859,14 +1178,16 @@ a.outlookCityName::after {
     left: 0;
     margin-top: 8px;
     width: 220px;
-    background: linear-gradient(135deg, var(--trietary-color) 0%, #000d5c 100%);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
     border-radius: 12px;
     color: white;
     font-family: 'Inter', sans-serif;
     font-weight: 600;
     padding: 8px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(34, 41, 255, 0.3);
+    box-shadow: var(--shadow-lg);
     display: none;
     flex-direction: column;
     gap: 6px;
@@ -992,6 +1313,31 @@ a.outlookCityName::after {
     opacity: 0.7;
 }
 
+.timelineProgress {
+    width: 100%;
+    height: 4px;
+    background: rgba(34, 41, 255, 0.2);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+
+.timelineProgressBar {
+    height: 100%;
+    background: linear-gradient(90deg, #1e40af, #3b82f6);
+    border-radius: 10px;
+    transition: width 0.3s ease;
+    width: 0%;
+}
+
+.timelineProgressText {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    margin-top: 2px;
+}
+
 /* ----------------------- Alert Popup ----------------------- */
 
 .mapboxgl-popup-content {
@@ -1049,12 +1395,15 @@ a.outlookCityName::after {
     display: flex;
     align-items: stretch;
     font-family: var(--main-font);
-    background: #000;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
     border-radius: 12px;
     overflow: hidden;
     min-width: 260px;
     max-width: 320px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--shadow-lg);
 }
 
 .alertPopupBar {
@@ -1082,6 +1431,7 @@ a.outlookCityName::after {
     font-weight: 800;
     color: #fff;
     line-height: 1.2;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .alertPopupLocation {
@@ -1101,6 +1451,7 @@ a.outlookCityName::after {
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
 }
 
 .alertPopupInfo i {
@@ -1114,6 +1465,7 @@ a.outlookCityName::after {
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .alertPopupDetails {
@@ -1138,6 +1490,57 @@ a.outlookCityName::after {
 }
 
 .alertPopupValue {
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    text-align: right;
+}
+
+/* ----------------------- Lightning Popup ----------------------- */
+
+.lightningPopup {
+    display: flex;
+    flex-direction: column;
+    font-family: var(--main-font);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+}
+
+.lightningPopupHeader {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    background: rgba(34, 41, 255, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lightningPopupBody {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.lightningPopupRow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.lightningPopupLabel {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.65);
+    white-space: nowrap;
+}
+
+.lightningPopupValue {
     font-size: 13px;
     font-weight: 800;
     color: #fff;
@@ -1228,12 +1631,15 @@ a.outlookCityName::after {
     max-width: 92vw;
     max-height: 78vh;
     margin: 10vh auto;
-    background: #2f333b;
-    border-radius: 14px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
     font-family: var(--main-font);
 }
 
@@ -1292,7 +1698,7 @@ a.outlookCityName::after {
 }
 
 .alertModalBody {
-    background: #3a3f47;
+    background: rgba(0, 0, 0, 0.8);
     color: #dfe3e8;
     padding: 18px 20px 22px 20px;
     font-family: 'Courier New', monospace;

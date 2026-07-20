@@ -6,6 +6,20 @@ window.registerLayerReinit = function registerLayerReinit(fn) {
     window.layerReinitializers.push(fn);
 };
 
+// Loading system
+let pageFullyLoaded = false;
+
+// Wait for page to fully load
+window.addEventListener('load', () => {
+    pageFullyLoaded = true;
+    
+    // Hide loading overlay
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
+});
+
 // API's
 const nwsRadars = "https://api.weather.gov/radar/stations";
 const excludedRadars = ["HWPA2", "TLKA2", "RKJK", "RKSG", "RODN", 'ROCO2'];
@@ -63,7 +77,8 @@ const outlookDayLabels = {
     day5: "Day 5",
     day6: "Day 6",
     day7: "Day 7",
-    day8: "Day 8"
+    day8: "Day 8",
+    nhc: "NHC Tropical Outlooks"
 };
 
 const outlookOptions = [
@@ -81,7 +96,15 @@ const outlookOptions = [
     { value: "day5-severe-probability", day: "day5", label: "Severe Probability (Day 5)", file: "https://www.spc.noaa.gov/products/exper/day4-8/day5prob.nolyr.geojson" },
     { value: "day6-severe-probability", day: "day6", label: "Severe Probability (Day 6)", file: "https://www.spc.noaa.gov/products/exper/day4-8/day6prob.nolyr.geojson" },
     { value: "day7-severe-probability", day: "day7", label: "Severe Probability (Day 7)", file: "https://www.spc.noaa.gov/products/exper/day4-8/day7prob.nolyr.geojson" },
-    { value: "day8-severe-probability", day: "day8", label: "Severe Probability (Day 8)", file: "https://www.spc.noaa.gov/products/exper/day4-8/day8prob.nolyr.geojson" }
+    { value: "day8-severe-probability", day: "day8", label: "Severe Probability (Day 8)", file: "https://www.spc.noaa.gov/products/exper/day4-8/day8prob.nolyr.geojson" },
+    // NHC Tropical Outlooks
+    { value: "nhc-atl-2day", day: "nhc", label: "Active Disturbances", file: "https://www.nhc.noaa.gov/gis/forecast/archive/gtwo_atl_2day.kmz", isKmz: true, discussionUrl: "https://tgftp.nws.noaa.gov/data/raw/ax/axnt20.knhc..txt" },
+    { value: "nhc-atl-7day", day: "nhc", label: "Active Disturbances", file: "https://www.nhc.noaa.gov/gis/forecast/archive/gtwo_atl_7day.kmz", isKmz: true, discussionUrl: "https://tgftp.nws.noaa.gov/data/raw/ax/axnt20.knhc..txt" },
+    { value: "nhc-epac-2day", day: "nhc", label: "Active Disturbances", file: "https://www.nhc.noaa.gov/gis/forecast/archive/gtwo_epac_2day.kmz", isKmz: true, discussionUrl: "https://tgftp.nws.noaa.gov/data/raw/ax/axpz20.knhc..txt" },
+    { value: "nhc-epac-7day", day: "nhc", label: "Active Disturbances", file: "https://www.nhc.noaa.gov/gis/forecast/archive/gtwo_epac_7day.kmz", isKmz: true, discussionUrl: "https://tgftp.nws.noaa.gov/data/raw/ax/axpz20.knhc..txt" },
+    { value: "nhc-combined", day: "nhc", label: "Active Disturbances", file: "combined", isKmz: true, isCombined: true },
+    // Active Storms
+    { value: "active-storms", day: "nhc", label: "Active Storms", file: "xweather", isXWeather: true }
 ];
 
 let currentOutlookOption = null;
@@ -385,15 +408,305 @@ function sortOutlookFeaturesBySeverity(geojson, option) {
     };
 }
 
+async function fetchWithCorsFallback(url) {
+    const corsProxies = [
+        { prefix: 'https://proxy.corsfix.com/?', encode: false },
+        { prefix: 'https://corsproxy.io/?', encode: true },
+        { prefix: 'https://php-cors-proxy.herokuapp.com/?', encode: false}
+    ];
+    
+    // Try direct fetch first
+    try {
+        const response = await fetch(url);
+        if (response.ok) {
+            return response;
+        }
+    } catch (error) {
+        console.log('Direct fetch failed, trying CORS proxies:', error);
+    }
+    
+    // Try CORS proxies with different encoding approaches
+    for (const proxy of corsProxies) {
+        try {
+            const proxyUrl = proxy.encode ? proxy.prefix + encodeURIComponent(url) : proxy.prefix + url;
+            const response = await fetch(proxyUrl);
+            if (response.ok) {
+                console.log('Successfully fetched via CORS proxy:', proxy.prefix);
+                return response;
+            }
+        } catch (error) {
+            console.log(`CORS proxy ${proxy.prefix} failed:`, error);
+        }
+    }
+    
+    throw new Error('Unable to fetch URL with any CORS proxy');
+}
+
+async function fetchAndParseKmz(url) {
+    const response = await fetchWithCorsFallback(url);
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Use JSZip to extract the KML file from the KMZ (ZIP format)
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    
+    // Find the first .kml file in the archive
+    let kmlContent = null;
+    for (const filename of Object.keys(zip.files)) {
+        if (filename.toLowerCase().endsWith('.kml') && !zip.files[filename].dir) {
+            kmlContent = await zip.files[filename].async('string');
+            break;
+        }
+    }
+    
+    if (!kmlContent) {
+        throw new Error('No KML file found in KMZ archive');
+    }
+    
+    // Parse the KML string to extract GeoJSON
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(kmlContent, 'text/xml');
+    
+    const features = [];
+    const placemarks = xmlDoc.getElementsByTagName('Placemark');
+    
+    for (let i = 0; i < placemarks.length; i++) {
+        const placemark = placemarks[i];
+        const name = placemark.getElementsByTagName('name')[0]?.textContent || '';
+        const description = placemark.getElementsByTagName('description')[0]?.textContent || '';
+        const polygon = placemark.getElementsByTagName('Polygon')[0];
+        
+        if (polygon) {
+            const outerBoundary = polygon.getElementsByTagName('outerBoundaryIs')[0];
+            if (outerBoundary) {
+                const linearRing = outerBoundary.getElementsByTagName('LinearRing')[0];
+                if (linearRing) {
+                    const coordinates = linearRing.getElementsByTagName('coordinates')[0]?.textContent;
+                    if (coordinates) {
+                        const coords = coordinates.trim().split(/\s+/).map(coord => {
+                            const [lng, lat, alt] = coord.split(',').map(Number);
+                            return [lng, lat];
+                        });
+                        
+                        if (coords.length > 0) {
+                            features.push({
+                                type: 'Feature',
+                                properties: {
+                                    LABEL: name || 'Tropical Outlook Area',
+                                    LABEL2: name || 'Tropical Outlook Area',
+                                    fill: '#ff6b35',
+                                    stroke: '#ff4500',
+                                    _isNhc: true,
+                                    description: description
+                                },
+                                geometry: {
+                                    type: 'Polygon',
+                                    coordinates: [coords]
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return {
+        type: 'FeatureCollection',
+        features: features
+    };
+}
+
+async function fetchWeatherWiseBackup() {
+    try {
+        // Use local WeatherWise disturbances file
+        const response = await fetch('./json/WeatherWise/Disturbances.geojson');
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.features) {
+                // Convert WeatherWise format to our standard format, preserving fill colors
+                const features = data.features.map(feature => ({
+                    type: 'Feature',
+                    properties: {
+                        LABEL: feature.properties?.storm_id || feature.properties?.id || 'Tropical Disturbance',
+                        LABEL2: feature.properties?.storm_id || feature.properties?.id || 'Tropical Disturbance',
+                        fill: feature.properties?.fill || '#ff6b35',
+                        stroke: feature.properties?.stroke || '#ff4500',
+                        _isNhc: true,
+                        _discussionText: feature.properties?.discussion || null,
+                        _day2Percentage: feature.properties?.day_2_percentage || null,
+                        _day2Category: feature.properties?.day_2_category || null,
+                        _day7Percentage: feature.properties?.day_7_percentage || null,
+                        _day7Category: feature.properties?.day_7_category || null,
+                        _ocean: feature.properties?.ocean || null
+                    },
+                    geometry: feature.geometry
+                }));
+                return { type: 'FeatureCollection', features };
+            }
+        }
+    } catch (error) {
+        console.log('Local WeatherWise disturbances failed:', error);
+    }
+
+    return null;
+}
+
+async function fetchXWeatherActiveStorms() {
+    try {
+        // Use local AerisWeather file
+        const response = await fetch('./json/WeatherWise/AerisWeather.geojson');
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.success && data.response && Array.isArray(data.response)) {
+                // Convert AerisWeather format to GeoJSON for active storms
+                const features = data.response.map(cyclone => {
+                    const position = cyclone.position;
+                    const details = position?.details || {};
+                    const profile = cyclone.profile || {};
+                    
+                    // Determine fill color based on storm category
+                    let fillColor = '#ff0000'; // Default red
+                    if (details.stormCat === 'H1' || details.stormCat === 'H2' || details.stormCat === 'H3' || details.stormCat === 'H4' || details.stormCat === 'H5') {
+                        fillColor = '#ff0000'; // Hurricane - red
+                    } else if (details.stormCat === 'TS') {
+                        fillColor = '#ff9200'; // Tropical Storm - orange
+                    } else if (details.stormCat === 'TD') {
+                        fillColor = '#ffff00'; // Tropical Depression - yellow
+                    }
+                    
+                    return {
+                        type: 'Feature',
+                        properties: {
+                            LABEL: details.stormName || profile.name || 'Tropical Cyclone',
+                            LABEL2: details.stormName || profile.name || 'Tropical Cyclone',
+                            fill: fillColor,
+                            stroke: '#ff4500',
+                            _isNhc: true,
+                            _stormType: details.stormType || 'Tropical Cyclone',
+                            _stormCat: details.stormCat || null,
+                            _windSpeedKTS: details.windSpeedKTS || null,
+                            _windSpeedMPH: details.windSpeedMPH || null,
+                            _pressureMB: details.pressureMB || null,
+                            _movement: details.movement?.direction || null,
+                            _movementSpeed: details.movement?.speedKTS || null,
+                            _basin: profile.basinCurrent || null,
+                            _isActive: profile.isActive || false
+                        },
+                        geometry: position?.location ? {
+                            type: 'Point',
+                            coordinates: position.location.coordinates
+                        } : null
+                    };
+                }).filter(f => f.geometry !== null);
+                return { type: 'FeatureCollection', features };
+            }
+        }
+    } catch (error) {
+        console.log('XWeather active storms failed:', error);
+    }
+
+    return null;
+}
+
+async function fetchAerisWeatherBackup() {
+    try {
+        const response = await fetch('https://data.api.xweather.com/tropicalcyclones/?client_id=DZLMGEFxCvfbQRG7aSN3c&client_secret=N63dulcmKzQTrWjIrTe2aGKmOw5AhERWWUmjHQKt&units=e');
+        if (response.ok) {
+            const data = await response.json();
+            if (data && Array.isArray(data)) {
+                // Convert AerisWeather format to GeoJSON
+                const features = data.map(cyclone => ({
+                    type: 'Feature',
+                    properties: {
+                        LABEL: cyclone.name || 'Tropical Cyclone',
+                        LABEL2: cyclone.name || 'Tropical Cyclone',
+                        fill: '#ff6b35',
+                        stroke: '#ff4500',
+                        _isNhc: true
+                    },
+                    geometry: cyclone.position ? {
+                        type: 'Point',
+                        coordinates: [cyclone.position.lon, cyclone.position.lat]
+                    } : null
+                })).filter(f => f.geometry !== null);
+                return { type: 'FeatureCollection', features };
+            }
+        }
+    } catch (error) {
+        console.log('AerisWeather backup failed:', error);
+    }
+
+    return null;
+}
+
 async function fetchOutlookGeojson(option) {
     if (outlookGeojsonCache.has(option.value)) {
         return outlookGeojsonCache.get(option.value);
     }
 
-    const response = await fetch(option.file);
-    if (!response.ok) throw new Error(`Unable to load ${option.label}`);
-    const rawData = await response.json();
-    const data = sortOutlookFeaturesBySeverity(rawData, option);
+    let data;
+    
+    if (option.isXWeather) {
+        // Fetch active storms from XWeather
+        data = await fetchXWeatherActiveStorms();
+        if (!data) {
+            throw new Error('Unable to load active storms');
+        }
+    } else if (option.isCombined) {
+        // Combined layer - fetch both Atlantic and Eastern Pacific
+        const atlOption = outlookOptions.find(opt => opt.value === 'nhc-atl-2day');
+        const epacOption = outlookOptions.find(opt => opt.value === 'nhc-epac-2day');
+        
+        try {
+            const [atlData, epacData] = await Promise.all([
+                fetchAndParseKmz(atlOption.file),
+                fetchAndParseKmz(epacOption.file)
+            ]);
+            
+            data = {
+                type: 'FeatureCollection',
+                features: [...atlData.features, ...epacData.features]
+            };
+        } catch (error) {
+            console.log('Primary KMZ sources failed, trying WeatherWise backup:', error);
+            const weatherWiseData = await fetchWeatherWiseBackup();
+            if (weatherWiseData) {
+                data = weatherWiseData;
+            } else {
+                console.log('WeatherWise failed, trying AerisWeather backup');
+                const aerisData = await fetchAerisWeatherBackup();
+                if (aerisData) {
+                    data = aerisData;
+                } else {
+                    throw new Error('All data sources failed');
+                }
+            }
+        }
+    } else if (option.isKmz) {
+        try {
+            data = await fetchAndParseKmz(option.file);
+        } catch (error) {
+            console.log('Primary KMZ source failed, trying WeatherWise backup:', error);
+            const weatherWiseData = await fetchWeatherWiseBackup();
+            if (weatherWiseData) {
+                data = weatherWiseData;
+            } else {
+                console.log('WeatherWise failed, trying AerisWeather backup');
+                const aerisData = await fetchAerisWeatherBackup();
+                if (aerisData) {
+                    data = aerisData;
+                } else {
+                    throw new Error('All data sources failed');
+                }
+            }
+        }
+    } else {
+        const response = await fetch(option.file);
+        if (!response.ok) throw new Error(`Unable to load ${option.label}`);
+        const rawData = await response.json();
+        data = sortOutlookFeaturesBySeverity(rawData, option);
+    }
 
     // Annotate features with a flag so the layer paint expression can
     // render CIG/SIG features with a lower opacity and allow overlap.
@@ -401,6 +714,9 @@ async function fetchOutlookGeojson(option) {
         data.features.forEach((f) => {
             if (!f.properties) f.properties = {};
             f.properties._isCig = isCigFeature(f, option);
+            if (option.discussionUrl) {
+                f.properties._discussionUrl = option.discussionUrl;
+            }
         });
     }
 
@@ -454,6 +770,144 @@ function findRiskAtPoint(geojson, point, option) {
     return matches.reduce((best, feature) => (
         getOutlookImpactRank(feature, option) > getOutlookImpactRank(best, option) ? feature : best
     ));
+}
+
+async function showNhcDiscussionTextPopup(lngLat, discussionText, title, props) {
+    // Format the discussion text for display
+    const formattedText = discussionText
+        .replace(/\$\$/g, '')
+        .replace(/\n/g, '<br>')
+        .substring(0, 2000); // Limit length for display
+    
+    // Build additional info from WeatherWise properties
+    let additionalInfo = '';
+    if (props._day2Percentage || props._day2Category) {
+        additionalInfo += `<div style="margin-top: 8px; font-size: 11px; color: #9eb4c8;">
+            <strong>2-Day:</strong> ${props._day2Percentage || 'N/A'} (${props._day2Category || 'N/A'})
+        </div>`;
+    }
+    if (props._day7Percentage || props._day7Category) {
+        additionalInfo += `<div style="margin-top: 4px; font-size: 11px; color: #9eb4c8;">
+            <strong>7-Day:</strong> ${props._day7Percentage || 'N/A'} (${props._day7Category || 'N/A'})
+        </div>`;
+    }
+    if (props._ocean) {
+        additionalInfo += `<div style="margin-top: 4px; font-size: 11px; color: #9eb4c8;">
+            <strong>Ocean:</strong> ${props._ocean === 'AT' ? 'Atlantic' : props._ocean === 'EP' ? 'Eastern Pacific' : props._ocean}
+        </div>`;
+    }
+    
+    new mapboxgl.Popup({ closeButton: true, className: 'outlookMapboxPopup', maxWidth: '400px' })
+        .setLngLat(lngLat)
+        .setHTML(`
+            <div class="outlookPopup">
+                <div class="outlookPopupBar" style="background-color: ${props.fill || '#ff6b35'};"></div>
+                <div class="outlookPopupBody">
+                    <div class="outlookPopupTitle">${title}</div>
+                    ${additionalInfo}
+                    <div style="font-size: 12px; color: #d9e2f5; line-height: 1.5; max-height: 300px; overflow-y: auto; margin-top: 8px;">
+                        ${formattedText}
+                    </div>
+                </div>
+            </div>`)
+        .addTo(map);
+}
+
+async function showActiveStormPopup(lngLat, props) {
+    // Build storm information
+    let stormInfo = '';
+    if (props._stormCat) {
+        stormInfo += `<div style="margin-top: 8px; font-size: 11px; color: #9eb4c8;">
+            <strong>Category:</strong> ${props._stormCat}
+        </div>`;
+    }
+    if (props._windSpeedMPH || props._windSpeedKTS) {
+        stormInfo += `<div style="margin-top: 4px; font-size: 11px; color: #9eb4c8;">
+            <strong>Wind:</strong> ${props._windSpeedMPH || 'N/A'} mph (${props._windSpeedKTS || 'N/A'} kts)
+        </div>`;
+    }
+    if (props._pressureMB) {
+        stormInfo += `<div style="margin-top: 4px; font-size: 11px; color: #9eb4c8;">
+            <strong>Pressure:</strong> ${props._pressureMB} mb
+        </div>`;
+    }
+    if (props._movement && props._movementSpeed) {
+        stormInfo += `<div style="margin-top: 4px; font-size: 11px; color: #9eb4c8;">
+            <strong>Movement:</strong> ${props._movement} at ${props._movementSpeed} kts
+        </div>`;
+    }
+    if (props._basin) {
+        stormInfo += `<div style="margin-top: 4px; font-size: 11px; color: #9eb4c8;">
+            <strong>Basin:</strong> ${props._basin}
+        </div>`;
+    }
+    if (props._isActive !== undefined) {
+        stormInfo += `<div style="margin-top: 4px; font-size: 11px; color: ${props._isActive ? '#4fd1ff' : '#ff6b35'};">
+            <strong>Status:</strong> ${props._isActive ? 'Active' : 'Inactive'}
+        </div>`;
+    }
+    
+    new mapboxgl.Popup({ closeButton: true, className: 'outlookMapboxPopup', maxWidth: '300px' })
+        .setLngLat(lngLat)
+        .setHTML(`
+            <div class="outlookPopup">
+                <div class="outlookPopupBar" style="background-color: ${props.fill || '#ff6b35'};"></div>
+                <div class="outlookPopupBody">
+                    <div class="outlookPopupTitle">${props.LABEL || 'Active Storm'}</div>
+                    ${stormInfo}
+                </div>
+            </div>`)
+        .addTo(map);
+}
+
+async function showNhcDiscussionPopup(lngLat, discussionUrl, title) {
+    try {
+        const response = await fetch(discussionUrl);
+        if (!response.ok) throw new Error('Unable to fetch NHC discussion');
+        
+        const discussionText = await response.text();
+        
+        // Format the discussion text for display
+        const formattedText = discussionText
+            .replace(/\$\$/g, '')
+            .replace(/\n/g, '<br>')
+            .substring(0, 2000); // Limit length for display
+        
+        new mapboxgl.Popup({ closeButton: true, className: 'outlookMapboxPopup', maxWidth: '400px' })
+            .setLngLat(lngLat)
+            .setHTML(`
+                <div class="outlookPopup">
+                    <div class="outlookPopupBar" style="background-color: #ff6b35;"></div>
+                    <div class="outlookPopupBody">
+                        <div class="outlookPopupTitle">${title}</div>
+                        <div style="font-size: 12px; color: #d9e2f5; line-height: 1.5; max-height: 300px; overflow-y: auto;">
+                            ${formattedText}
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <a href="${discussionUrl}" target="_blank" style="color: #4fd1ff; font-size: 12px; text-decoration: none;">View Full Discussion →</a>
+                        </div>
+                    </div>
+                </div>`)
+            .addTo(map);
+    } catch (error) {
+        console.error('Error fetching NHC discussion:', error);
+        new mapboxgl.Popup({ closeButton: true, className: 'outlookMapboxPopup', maxWidth: '280px' })
+            .setLngLat(lngLat)
+            .setHTML(`
+                <div class="outlookPopup">
+                    <div class="outlookPopupBar" style="background-color: #ff6b35;"></div>
+                    <div class="outlookPopupBody">
+                        <div class="outlookPopupTitle">${title}</div>
+                        <div style="font-size: 12px; color: #d9e2f5;">
+                            Unable to load discussion text.
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <a href="${discussionUrl}" target="_blank" style="color: #4fd1ff; font-size: 12px; text-decoration: none;">View Full Discussion →</a>
+                        </div>
+                    </div>
+                </div>`)
+            .addTo(map);
+    }
 }
 
 async function showOutlookRiskPopup(lngLat) {
@@ -699,7 +1153,23 @@ function setupBaseLayers() {
     // wind/hail probabilities, or severe probability for Day 4-8) rather
     // than just whatever one product happens to be drawn on the map right now.
     map.on('click', 'outlook-fill-layer', (e) => {
-        showOutlookRiskPopup(e.lngLat);
+        if (e.features.length > 0) {
+            const feature = e.features[0];
+            const props = feature.properties || {};
+            
+            // Check if this is an active storm
+            if (props._stormType || props._stormCat) {
+                showActiveStormPopup(e.lngLat, props);
+            }
+            // Check if this is an NHC outlook with discussion text
+            else if (props._discussionText) {
+                showNhcDiscussionTextPopup(e.lngLat, props._discussionText, props.LABEL || 'NHC Discussion', props);
+            } else if (props._discussionUrl) {
+                showNhcDiscussionPopup(e.lngLat, props._discussionUrl, props.LABEL || 'NHC Discussion');
+            } else {
+                showOutlookRiskPopup(e.lngLat);
+            }
+        }
     });
 
     map.on('mouseleave', 'outlook-fill-layer', () => {
@@ -744,6 +1214,11 @@ function selectRadarSite(radarId) {
     currentFirstLetter = firstLetter;
     window.currentRadarId = radarId;
 
+    // Update URL with radar site parameter
+    const url = new URL(window.location);
+    url.searchParams.set('radSite', radarId);
+    window.history.replaceState({}, '', url);
+
     if (typeof window.clearRadarLayers === 'function') {
         window.clearRadarLayers();
     }
@@ -764,10 +1239,13 @@ function selectRadarSite(radarId) {
 
     const rad_config = {
         base: [
-            { id: "N0B", name: "NEXRAD Super-Res Reflectivity", label: "Reflectivity" },
-            { id: "N0G", name: "NEXRAD Super-Res Velocity", label: "Base Velocity" },
+            { id: "N0B", name: "NEXRAD Super-Res Reflectivity", label: "Reflectivity", hasTilts: true, tiltBase: "N0B" },
+            { id: "N0G", name: "NEXRAD Super-Res Velocity", label: "Base Velocity", hasTilts: true, tiltBase: "N0G" },
             { id: "N0C", name: "NEXRAD Correlation Coefficient", label: "Corr. Coefficient" },
             { id: "N0K", name: "NEXRAD Differential Reflectivity", label: "Diff. Reflectivity" },
+            { id: "N0H", name: "NEXRAD Hydrometer Classification", label: "Hydrometer Class" },
+            { id: "SW0", name: "NEXRAD Spectrum Width", label: "Spectrum Width" },
+            { id: "EEH", name: "Enhanced Echo Tops", label: "Enhanced Echo Tops" },
             { id: "DTA", name: "Digital Precipitation", label: "Storm Accumulation"},
             // Not in nexrad.js's RADAR_PRODUCT_MAP, so this one always falls
             // straight through to the IEM raster tiles.
@@ -820,6 +1298,11 @@ function selectRadarSite(radarId) {
                 window.updateTimelineTicks();
             }
         });
+    }
+    
+    // Start auto-refresh for radar frames
+    if (typeof window.startRadarAutoRefresh === 'function') {
+        window.startRadarAutoRefresh(radarId, selectedProduct);
     }
 
     if (elProductsList) {
@@ -877,11 +1360,24 @@ if (timelineSlider) {
 // This is the single place product switches happen: it renders the new
 // product's latest frame right away, then repopulates the preloaded-frame
 // cache so the timeline slider has something to scrub through.
-function updateRadarProduct(productId) {
+async function updateRadarProduct(productId) {
     selectedProduct = productId;
     lastSelectedProduct = productId; // Remember this for future radar selections
     window.currentSelectedProduct = productId;
     if (elSelectedProduct) elSelectedProduct.textContent = getProductName(productId);
+    
+    // Update colorbar based on selected product
+    if (typeof window.updateColorbar === 'function') {
+        await window.updateColorbar(productId);
+    }
+    
+    // Update tilt dropdown visibility and options
+    updateTiltDropdown(productId);
+    
+    // Restart auto-refresh with new product
+    if (currentRadarId && typeof window.startRadarAutoRefresh === 'function') {
+        window.startRadarAutoRefresh(currentRadarId, productId);
+    }
 
     if (typeof window.clearRadarLayers === 'function') {
         window.clearRadarLayers();
@@ -906,6 +1402,80 @@ function updateRadarProduct(productId) {
                 window.updateTimelineTicks();
             }
         });
+    }
+}
+
+// Update tilt dropdown based on selected product
+function updateTiltDropdown(productId) {
+    const tiltDropdown = document.getElementById('tiltDropdown');
+    const tiltSelect = document.getElementById('tiltSelect');
+    
+    if (!tiltDropdown || !tiltSelect) return;
+    
+    // Check if the product has tilts configured
+    const hasTilts = typeof window.tiltConfigs !== 'undefined' && window.tiltConfigs[productId];
+    
+    if (hasTilts) {
+        // Show dropdown and populate with tilt options
+        tiltDropdown.style.display = 'block';
+        tiltSelect.innerHTML = '';
+        
+        window.tiltConfigs[productId].forEach(tilt => {
+            const option = document.createElement('option');
+            option.value = tilt.id;
+            option.textContent = tilt.name;
+            if (tilt.id === productId) {
+                option.selected = true;
+            }
+            tiltSelect.appendChild(option);
+        });
+        
+        // Add event listener for tilt changes - use a flag to prevent clearing
+        tiltSelect.onchange = (e) => {
+            const newTilt = e.target.value;
+            switchTiltOnly(newTilt);
+        };
+    } else {
+        // Hide dropdown for products without tilts
+        tiltDropdown.style.display = 'none';
+    }
+}
+
+// Switch tilt only without clearing everything
+async function switchTiltOnly(newTilt) {
+    selectedProduct = newTilt;
+    lastSelectedProduct = newTilt;
+    window.currentSelectedProduct = newTilt;
+    if (elSelectedProduct) elSelectedProduct.textContent = getProductName(newTilt);
+    
+    // Update colorbar
+    if (typeof window.updateColorbar === 'function') {
+        await window.updateColorbar(newTilt);
+    }
+    
+    // Render the new tilt immediately
+    if (currentRadarId && typeof window.tryRenderNexradWebGL === 'function') {
+        window.tryRenderNexradWebGL(currentRadarId, newTilt);
+    }
+    
+    // Preload frames for the new tilt
+    if (window.preloadedRadarFrames) {
+        window.preloadedRadarFrames.clear();
+        if (timelineTicks) timelineTicks.innerHTML = '';
+        if (timelineSlider) timelineSlider.value = 0;
+        if (timelineLabel) timelineLabel.textContent = 'Latest';
+    }
+    if (typeof window.preloadRadarFrames === 'function') {
+        window.preloadRadarFrames(currentRadarId, newTilt).then(() => {
+            if (typeof window.updateTimelineTicks === 'function') {
+                window.updateTimelineTicks();
+            }
+        });
+    }
+    
+    // Restart auto-refresh with new tilt
+    if (currentRadarId && typeof window.startRadarAutoRefresh === 'function') {
+        window.startRadarAutoRefresh(currentRadarId, newTilt);
     }
 }
 

@@ -30,11 +30,296 @@ window.selectedColorTable = 'Default';
 // Per-product color table selections
 window.colorTables = {
     reflectivity: 'Radarscope',
-    velocity: 'IEM',
+    velocity: 'Default',
     cc: 'Default',
     df: 'Default',
     dta: 'Default'
 };
+
+// Product-specific value ranges for colorbar ticks
+const productValueRanges = {
+    'N0B': { min: -20, max: 90, unit: 'dBZ' },
+    'NAB': { min: -20, max: 90, unit: 'dBZ' },
+    'N1B': { min: -20, max: 90, unit: 'dBZ' },
+    'NBB': { min: -20, max: 90, unit: 'dBZ' },
+    'N2B': { min: -20, max: 90, unit: 'dBZ' },
+    'N3B': { min: -20, max: 90, unit: 'dBZ' },
+    'N0G': { min: -140, max: 140, unit: 'kts' },
+    'NAG': { min: -140, max: 140, unit: 'kts' },
+    'N1G': { min: -140, max: 140, unit: 'kts' },
+    'NBU': { min: -140, max: 140, unit: 'kts' },
+    'N2U': { min: -140, max: 140, unit: 'kts' },
+    'N3U': { min: -140, max: 140, unit: 'kts' },
+    'N0C': { min: 0, max: 100, unit: '%' },
+    'N0K': { min: -5, max: 10, unit: 'dB' },
+    'N0H': { min: 0, max: 10, unit: 'HC' },
+    'SW0': { min: 0, max: 63, unit: 'm/s' },
+    'EEH': { min: 0, max: 70000, unit: 'ft' },
+    'TZ0': { min: -20, max: 75, unit: 'dBZ' },
+    'TZ1': { min: -20, max: 75, unit: 'dBZ' },
+    'TZ2': { min: -20, max: 75, unit: 'dBZ' },
+    'TZL': { min: -20, max: 75, unit: 'dBZ' },
+    'TV0': { min: -50, max: 50, unit: 'm/s' },
+    'TV1': { min: -50, max: 50, unit: 'm/s' },
+    'TV2': { min: -50, max: 50, unit: 'm/s' }
+};
+
+// Color table gradients for different products
+const colorTableGradients = {
+    reflectivity: 'linear-gradient(to top, #969153, #cacdaa, #919ab4, #415b9e, #21c034, #0da212, #ffe200, #ff0000, #ffffff, #b200ff, #05ecf0, #012020)',
+    velocity: 'linear-gradient(to top, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
+    correlation: 'linear-gradient(to top, #000000, #0000ff, #00ff00, #ffff00, #ff0000)',
+    differential: 'linear-gradient(to top, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000)',
+    hydrometer: 'linear-gradient(to top, #000000, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000, #ffff00)',
+    spectrum: 'linear-gradient(to top, #000000, #0000ff, #00ff00, #ffff00, #ff0000)',
+    echoTops: 'linear-gradient(to top, #000000, #0000ff, #00ff00, #ffff00, #ff0000, #ffffff)',
+    default: 'linear-gradient(to top, #969153, #cacdaa, #919ab4, #415b9e, #21c034, #0da212, #ffe200, #ff0000, #ffffff, #b200ff, #05ecf0, #012020)'
+};
+
+// Tilt configurations for products that support multiple tilts
+const tiltConfigs = {
+    'N0B': [
+        { id: 'N0B', name: 'Tilt 1' },
+        { id: 'NAB', name: 'Tilt 2' },
+        { id: 'N1B', name: 'Tilt 3' },
+        { id: 'NBB', name: 'Tilt 4' },
+        { id: 'N2B', name: 'Tilt 5' },
+        { id: 'N3B', name: 'Tilt 6' }
+    ],
+    'N0G': [
+        { id: 'N0G', name: 'Tilt 1' },
+        { id: 'NAG', name: 'Tilt 2' },
+        { id: 'N1G', name: 'Tilt 3' },
+        { id: 'NBU', name: 'Tilt 4' },
+        { id: 'N2U', name: 'Tilt 5' },
+        { id: 'N3U', name: 'Tilt 6' }
+    ]
+};
+
+// Update colorbar based on selected product
+async function updateColorbar(productId) {
+    const colortable = document.getElementById('colortable');
+    const ticks = document.getElementById('ticks');
+    const tooltip = document.getElementById('colortableTooltip');
+    
+    if (!colortable || !ticks) return;
+    
+    const range = productValueRanges[productId] || { min: -20, max: 75, unit: 'dBZ' };
+    
+    // Try to load the actual color table for this product
+    let gradient = colorTableGradients.default;
+    
+    try {
+        // Map products to their colortable subdirectories
+        const productToSubdir = {
+            'N0B': 'Reflectivity', 'NAB': 'Reflectivity', 'N1B': 'Reflectivity', 'NBB': 'Reflectivity', 'N2B': 'Reflectivity', 'N3B': 'Reflectivity',
+            'TZ0': 'Reflectivity', 'TZ1': 'Reflectivity', 'TZ2': 'Reflectivity', 'TZL': 'Reflectivity',
+            'N0G': 'Velocity', 'NAG': 'Velocity', 'N1G': 'Velocity', 'NBU': 'Velocity', 'N2U': 'Velocity', 'N3U': 'Velocity',
+            'TV0': 'Velocity', 'TV1': 'Velocity', 'TV2': 'Velocity',
+            'N0C': 'CC',
+            'N0K': 'DF',
+            'DTA': 'DTA'
+        };
+        
+        const subdir = productToSubdir[productId] || 'Reflectivity';
+        
+        // Get color table for this specific product type
+        let selectedTable = 'IEM';
+        if (typeof window.getColorTableForProduct === 'function') {
+            selectedTable = window.getColorTableForProduct(productId);
+        } else if (window.selectedColorTable) {
+            selectedTable = window.selectedColorTable;
+        }
+        
+        // Map color table names to file extensions
+        const tableExtensions = {
+            'IEM': '.json',
+            'Base': '.pal',
+            'Jesse': '.pal',
+            'Radarscope': '.pal',
+            'Default': '.pal',
+            'DefaultI': '.pal',
+            'VelocityI': '.pal',
+        };
+        
+        const extension = tableExtensions[selectedTable] || '.json';
+        const filename = selectedTable + extension;
+        
+        // Cache color table gradients to avoid repeated fetches
+        const cacheKey = `${subdir}_${filename}`;
+        if (window.colorTableGradientCache && window.colorTableGradientCache[cacheKey]) {
+            gradient = window.colorTableGradientCache[cacheKey];
+        } else {
+            const response = await fetch(`../json/colortables/${subdir}/${filename}`);
+            if (response.ok) {
+                const text = await response.text();
+                let stops = [];
+                
+                if (extension === '.json') {
+                    const json = JSON.parse(text);
+                    if (Array.isArray(json)) {
+                        if (Array.isArray(json[0])) {
+                            stops = json.map(([value, color]) => [value, normalizeColor(color)]);
+                        } else if (json[0] && typeof json[0] === 'object') {
+                            stops = json.map((entry) => [entry.value, normalizeColor(entry.color)]);
+                        }
+                    } else if (json && typeof json === 'object') {
+                        stops = Object.entries(json).map(([value, color]) => [Number(value), normalizeColor(color)]);
+                    }
+                } else if (extension === '.pal') {
+                    const lines = text.split('\n');
+                    for (const line of lines) {
+                        const match = line.match(/^(?:color(?:\d+)?|SolidColor):\s*(-?\d+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+(\d+)/);
+                        if (match) {
+                            const value = parseFloat(match[1]);
+                            const r = parseInt(match[2], 10);
+                            const g = parseInt(match[3], 10);
+                            const b = parseInt(match[4], 10);
+                            stops.push([value, [r, g, b, 255]]);
+                        }
+                    }
+                }
+                
+                // Convert stops to CSS gradient
+                if (stops.length > 0) {
+                    // Sort stops by value
+                    stops.sort((a, b) => a[0] - b[0]);
+                    
+                    // Normalize values to 0-100% range
+                    const minValue = Math.min(...stops.map(s => s[0]));
+                    const maxValue = Math.max(...stops.map(s => s[0]));
+                    const valueRange = maxValue - minValue || 1;
+                    
+                    const gradientStops = stops.map(([value, color]) => {
+                        const percentage = ((value - minValue) / valueRange) * 100;
+                        const [r, g, b, a] = color;
+                        return `rgba(${r}, ${g}, ${b}, ${a / 255}) ${percentage}%`;
+                    }).join(', ');
+                    
+                    gradient = `linear-gradient(to top, ${gradientStops})`;
+                    
+                    // Cache the gradient
+                    if (!window.colorTableGradientCache) {
+                        window.colorTableGradientCache = {};
+                    }
+                    window.colorTableGradientCache[cacheKey] = gradient;
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to load color table for gradient:', error);
+        // Fall back to default gradient logic
+        if (productId.includes('G') || productId.includes('U') || productId.includes('V')) {
+            gradient = colorTableGradients.velocity;
+        } else if (productId.includes('B') || productId.includes('Z')) {
+            gradient = colorTableGradients.reflectivity;
+        } else if (productId.includes('C')) {
+            gradient = colorTableGradients.correlation;
+        } else if (productId.includes('K')) {
+            gradient = colorTableGradients.differential;
+        } else if (productId.includes('H')) {
+            gradient = colorTableGradients.hydrometer;
+        } else if (productId.includes('SW')) {
+            gradient = colorTableGradients.spectrum;
+        } else if (productId.includes('EE')) {
+            gradient = colorTableGradients.echoTops;
+        }
+    }
+    
+    colortable.style.backgroundImage = gradient;
+    
+    // Calculate proper tick increments - always count by 10
+    const rangeSpan = range.max - range.min;
+    const tickCount = 6;
+    
+    // Always use increments of 10
+    const niceStep = 10;
+    
+    // Calculate the first tick that aligns with 10
+    const firstTick = Math.ceil(range.min / 10) * 10;
+    
+    // Generate ticks
+    let tickHtml = '';
+    let currentTick = firstTick;
+    let tickIndex = 0;
+    
+    while (currentTick <= range.max && tickIndex < tickCount) {
+        tickHtml += `<ul>${Math.round(currentTick)}</ul>`;
+        currentTick += niceStep;
+        tickIndex++;
+    }
+    
+    // If we didn't get enough ticks, fill in from the end
+    if (tickIndex < tickCount) {
+        tickHtml = '';
+        for (let i = 0; i < tickCount; i++) {
+            const value = range.min + (rangeSpan * i / (tickCount - 1));
+            tickHtml += `<ul>${Math.round(value)}</ul>`;
+        }
+    }
+    
+    ticks.innerHTML = tickHtml;
+    
+    // Store current range for hover calculations
+    window.currentColorbarRange = range;
+}
+
+// Helper function to normalize color (from nexrad.js)
+function normalizeColor(color) {
+    if (Array.isArray(color)) {
+        // Already [r, g, b, a]
+        return color;
+    }
+    if (typeof color === 'string') {
+        // Hex color like "#ff0000" or "#ff0000ff"
+        const hex = color.replace('#', '');
+        if (hex.length === 6) {
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            return [r, g, b, 255];
+        } else if (hex.length === 8) {
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            const a = parseInt(hex.substr(6, 2), 16);
+            return [r, g, b, a];
+        }
+    }
+    return [255, 255, 255, 255]; // Default white
+}
+
+// Initialize colorbar hover functionality
+function initColorbarHover() {
+    const colortable = document.getElementById('colortable');
+    const tooltip = document.getElementById('colortableTooltip');
+    
+    if (!colortable || !tooltip) return;
+    
+    colortable.addEventListener('mousemove', (e) => {
+        const rect = colortable.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const percentage = 1 - (y / rect.height); // Invert because gradient goes bottom to top
+        
+        const range = window.currentColorbarRange || { min: -20, max: 75, unit: 'dBZ' };
+        const value = range.min + (percentage * (range.max - range.min));
+        
+        tooltip.textContent = `${value.toFixed(1)} ${range.unit}`;
+        tooltip.style.top = `${y}px`;
+    });
+    
+    colortable.addEventListener('mouseleave', () => {
+        tooltip.textContent = '--';
+    });
+}
+
+// Initialize colorbar when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    initColorbarHover();
+});
+
+window.updateColorbar = updateColorbar;
+window.tiltConfigs = tiltConfigs;
 
 // ----- Settings Persistence -----
 

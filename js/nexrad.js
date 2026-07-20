@@ -28,7 +28,7 @@ const awsLevelIIIBucket = "https://unidata-nexrad-level3.s3.amazonaws.com/";
 const NEXRAD_L3_PACKET_DIGITAL_RADIAL = 16;
 const NEXRAD_L3_PACKET_RLE_RADIAL = 0xAF1F; // 44831 — legacy 16-level Radial Data Packet
 
-const FRAME_COUNT = 5;
+const FRAME_COUNT = 25;
 
 const units = {
     153: 'DBz', // Reflectivity
@@ -239,6 +239,47 @@ function formatTickTime(date) {
 // Store preloaded frames globally
 window.preloadedRadarFrames = new Map();
 
+// Auto-refresh interval for radar frames (in milliseconds)
+let radarRefreshInterval = null;
+const RADAR_REFRESH_MS = 120000; // Check for new frames every 2 minutes (reduced from 60s for performance)
+
+// Start auto-refreshing radar frames
+function startRadarAutoRefresh(radarStation, product) {
+    // Clear any existing interval
+    if (radarRefreshInterval) {
+        clearInterval(radarRefreshInterval);
+    }
+    
+    // Set up new interval
+    radarRefreshInterval = setInterval(async () => {
+        console.log('[Deluge] Auto-refreshing radar frames...');
+        try {
+            const productCode = (product || window.currentSelectedProduct || 'N0B').toUpperCase();
+            await preloadRadarFrames(radarStation, productCode);
+            
+            // Update timeline ticks after refresh
+            if (typeof window.updateTimelineTicks === 'function') {
+                window.updateTimelineTicks();
+            }
+            
+            console.log('[Deluge] Radar frames auto-refreshed');
+        } catch (error) {
+            console.error('[Deluge] Failed to auto-refresh radar frames:', error);
+        }
+    }, RADAR_REFRESH_MS);
+    
+    console.log('[Deluge] Started radar auto-refresh (interval:', RADAR_REFRESH_MS, 'ms)');
+}
+
+// Stop auto-refreshing radar frames
+function stopRadarAutoRefresh() {
+    if (radarRefreshInterval) {
+        clearInterval(radarRefreshInterval);
+        radarRefreshInterval = null;
+        console.log('[Deluge] Stopped radar auto-refresh');
+    }
+}
+
 // Preload the last 5 radar frames for a given radar site and product
 async function preloadRadarFrames(radarStation, product) {
     const productCode = (product || 'N0B').toUpperCase();
@@ -258,17 +299,26 @@ async function preloadRadarFrames(radarStation, product) {
             return [];
         }
         
-        console.log('[Deluge] Preloading', keys.length, 'radar frames');
-        console.log('[Deluge] Keys to fetch:', keys);
+        // Limit the number of frames to preload for better performance
+        const maxFramesToPreload = 10;
+        const keysToLoad = keys.slice(-maxFramesToPreload);
+        const totalFrames = keysToLoad.length;
+        console.log('[Deluge] Preloading up to', totalFrames, 'radar frames (limited from', keys.length, 'total)');
+        console.log('[Deluge] Keys to fetch:', keysToLoad);
+        
+        // Initialize progress bar
+        if (typeof window.updateLoadingProgress === 'function') {
+            window.updateLoadingProgress(0, totalFrames);
+        }
         
         // Update timeline label to show loading progress
         const timelineLabel = document.getElementById('timelineLabel');
         if (timelineLabel) {
-            timelineLabel.textContent = `Frames Loading (0/${FRAME_COUNT})`;
+            timelineLabel.textContent = `Frames Loading (0/${totalFrames})`;
         }
         
         // Fetch the most recent frame first (last key) for immediate display
-        const latestKey = keys[keys.length - 1];
+        const latestKey = keysToLoad[keysToLoad.length - 1];
         console.log('[Deluge] Fetching latest frame first:', latestKey);
         
         try {
@@ -282,7 +332,8 @@ async function preloadRadarFrames(radarStation, product) {
                 timestamp: latestTimestamp,
                 parsed: latestParsed,
                 colorLut: latestColorLut,
-                mesh: buildRadialMesh(latestParsed.radial, latestParsed.pdb.latitude, latestParsed.pdb.longitude, latestColorLut)
+                mesh: buildRadialMesh(latestParsed.radial, latestParsed.pdb.latitude, latestParsed.pdb.longitude, latestColorLut),
+                loaded: true
             };
             
             // Store the latest frame immediately at the last index
@@ -290,63 +341,86 @@ async function preloadRadarFrames(radarStation, product) {
             console.log('[Deluge] Latest frame loaded and stored');
             
             // Update progress
+            if (typeof window.updateLoadingProgress === 'function') {
+                window.updateLoadingProgress(1, totalFrames);
+            }
             if (timelineLabel) {
-                timelineLabel.textContent = `Frames Loading (1/${FRAME_COUNT})`;
+                timelineLabel.textContent = `Frames Loading (1/${totalFrames})`;
             }
             
             // Fetch remaining frames in the background
-            const remainingKeys = keys.slice(0, -1);
-            const remainingPromises = remainingKeys.map(async (key, index) => {
-                try {
-                    console.log('[Deluge] Fetching background frame:', key);
-                    const buffer = await fetchLevelIIIBuffer(key);
-                    const parsed = await parseLevelIIIBuffer(buffer, productCode);
-                    const timestamp = parseTimestampFromKey(key);
-                    const colorLut = await buildColorLut(productCode, parsed.radial.is16Level);
-                    
-                    // Update progress as each frame loads
-                    if (timelineLabel) {
-                        const loadedCount = window.preloadedRadarFrames.size;
-                        timelineLabel.textContent = `Frames Loading (${loadedCount}/${FRAME_COUNT})`;
+            const remainingKeys = keysToLoad.slice(0, -1);
+            let loadedCount = 1;
+            
+            // Load frames in smaller batches to reduce memory pressure
+            const batchSize = 3;
+            for (let i = 0; i < remainingKeys.length; i += batchSize) {
+                const batch = remainingKeys.slice(i, i + batchSize);
+                const batchPromises = batch.map(async (key) => {
+                    try {
+                        console.log('[Deluge] Fetching background frame:', key);
+                        const buffer = await fetchLevelIIIBuffer(key);
+                        const parsed = await parseLevelIIIBuffer(buffer, productCode);
+                        const timestamp = parseTimestampFromKey(key);
+                        const colorLut = await buildColorLut(productCode, parsed.radial.is16Level);
+                        
+                        const frame = {
+                            key,
+                            timestamp,
+                            parsed,
+                            colorLut,
+                            mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut),
+                            loaded: true
+                        };
+                        
+                        return { frame, key, success: true };
+                    } catch (error) {
+                        console.error('[Deluge] Failed to preload frame:', key, error);
+                        return { key, success: false };
                     }
-                    
-                    return {
-                        key,
-                        timestamp,
-                        parsed,
-                        colorLut,
-                        mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut)
-                    };
-                } catch (error) {
-                    console.error('[Deluge] Failed to preload frame:', key, error);
-                    return null;
+                });
+                
+                const results = await Promise.all(batchPromises);
+                
+                for (const result of results) {
+                    if (result.success) {
+                        // Find the original index in the full keys array
+                        const originalIndex = keys.indexOf(result.key);
+                        if (originalIndex !== -1) {
+                            window.preloadedRadarFrames.set(originalIndex, result.frame);
+                        }
+                        loadedCount++;
+                    }
                 }
-            });
+                
+                // Update progress
+                if (typeof window.updateLoadingProgress === 'function') {
+                    window.updateLoadingProgress(loadedCount, totalFrames);
+                }
+                if (timelineLabel) {
+                    timelineLabel.textContent = `Frames Loading (${loadedCount}/${totalFrames})`;
+                }
+                
+                // Small delay between batches to allow UI to update
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
             
-            const remainingFrames = await Promise.all(remainingPromises);
-            const validRemainingFrames = remainingFrames.filter(f => f !== null);
-            
-            // Store remaining frames
-            validRemainingFrames.forEach((frame, index) => {
-                window.preloadedRadarFrames.set(index, frame);
-            });
-            
-            const totalFrames = validRemainingFrames.length + 1;
-            console.log('[Deluge] Successfully preloaded', totalFrames, 'radar frames');
+            console.log('[Deluge] Successfully preloaded', loadedCount, 'radar frames');
             
             // Reset timeline label to "Latest" when loading is complete
             if (timelineLabel) {
                 timelineLabel.textContent = 'Latest';
             }
+            if (typeof window.updateLoadingProgress === 'function') {
+                window.updateLoadingProgress(totalFrames, totalFrames);
+            }
             
-            // Return all frames for compatibility
-            const allFrames = [...validRemainingFrames, latestFrame];
-            return allFrames;
+            return Array.from(window.preloadedRadarFrames.values());
             
         } catch (error) {
             console.error('[Deluge] Failed to load latest frame:', error);
-            // Fallback: load all frames in parallel if latest frame fails
-            const framePromises = keys.map(async (key) => {
+            // Fallback: load limited frames in parallel if latest frame fails
+            const framePromises = keysToLoad.map(async (key) => {
                 try {
                     console.log('[Deluge] Fallback fetching key:', key);
                     const buffer = await fetchLevelIIIBuffer(key);
@@ -359,7 +433,8 @@ async function preloadRadarFrames(radarStation, product) {
                         timestamp,
                         parsed,
                         colorLut,
-                        mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut)
+                        mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut),
+                        loaded: true
                     };
                 } catch (error) {
                     console.error('[Deluge] Failed to preload frame:', key, error);
@@ -370,8 +445,11 @@ async function preloadRadarFrames(radarStation, product) {
             const frames = await Promise.all(framePromises);
             const validFrames = frames.filter(f => f !== null);
             
-            validFrames.forEach((frame, index) => {
-                window.preloadedRadarFrames.set(index, frame);
+            validFrames.forEach((frame) => {
+                const originalIndex = keys.indexOf(frame.key);
+                if (originalIndex !== -1) {
+                    window.preloadedRadarFrames.set(originalIndex, frame);
+                }
             });
             
             console.log('[Deluge] Fallback: Successfully preloaded', validFrames.length, 'radar frames');
@@ -1299,6 +1377,18 @@ window.refreshProductDrawerForSite = refreshProductDrawerForSite;
 // setting window.currentRadarId directly, e.g.:
 //   await window.switchRadarSite('KLOT');
 async function switchRadarSite(newRadarId, product) {
+    // Wait for page to fully load before fetching data
+    if (!window.pageFullyLoaded) {
+        console.log('Waiting for page to load before fetching radar data...');
+        await new Promise(resolve => {
+            if (window.pageFullyLoaded) {
+                resolve();
+            } else {
+                window.addEventListener('load', resolve, { once: true });
+            }
+        });
+    }
+
     clearRadarLayers();
 
     window.currentRadarId = (newRadarId || '').toUpperCase();
@@ -1322,6 +1412,8 @@ window.preloadRadarFrames = preloadRadarFrames;
 window.renderPreloadedFrame = renderPreloadedFrame;
 window.parseTimestampFromKey = parseTimestampFromKey;
 window.formatTickTime = formatTickTime;
+window.startRadarAutoRefresh = startRadarAutoRefresh;
+window.stopRadarAutoRefresh = stopRadarAutoRefresh;
 
 // AtticRadar: https://github.com/SteepAtticStairs/AtticRadar/blob/main/app/radar/libnexrad/detect_level.js
 

@@ -9,6 +9,7 @@ const layersDropdown = document.getElementById("layersDropdown");
 let camerasVisible = true;
 let alertsVisible = true;
 let stormTracksVisible = true;
+let lightningVisible = true;
 
 function openSettingsModal() {
     if (settingsModalContainer) {
@@ -90,10 +91,23 @@ function toggleStormTracksLayer() {
     });
 }
 
+// Lightning toggle
+function toggleLightningLayer() {
+    lightningVisible = !lightningVisible;
+
+    const toggle = document.getElementById("lightningToggle");
+    if (toggle) toggle.classList.toggle("active", lightningVisible);
+
+    if (map.getLayer("lightning-layer")) {
+        map.setLayoutProperty("lightning-layer", "visibility", lightningVisible ? "visible" : "none");
+    }
+}
+
 function menuClicks() {
     const camerasToggle = document.getElementById("camerasToggle");
     const alertsToggle = document.getElementById("alertsToggle");
     const stormTracksToggle = document.getElementById("stormTracksToggle");
+    const lightningToggle = document.getElementById("lightningToggle");
 
     if (camerasToggle) {
         camerasToggle.classList.add("active");
@@ -116,6 +130,14 @@ function menuClicks() {
         stormTracksToggle.addEventListener("click", (e) => {
             e.stopPropagation();
             toggleStormTracksLayer();
+        });
+    }
+
+    if (lightningToggle) {
+        lightningToggle.classList.add("active");
+        lightningToggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleLightningLayer();
         });
     }
 }

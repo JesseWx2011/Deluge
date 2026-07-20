@@ -5,21 +5,21 @@ const rangeFoldedval = 999;
 
 const colortables = {
     "Reflectivity": {
-        "Default": "./json/colortables/Reflectivity/Base.pal",
-        "RadarScope": "./json/colortables/Reflectivity/Radarscope.pal",
-        "Jesse": "./json/colortables/Reflectivity/Jesse.pal"
+        "Default": "../json/colortables/Reflectivity/Base.pal",
+        "RadarScope": "../json/colortables/Reflectivity/Radarscope.pal",
+        "Jesse": "../json/colortables/Reflectivity/Jesse.pal"
     },
     "Velocity": {
-        "Default": "./json/colortables/Velocity/Default.pal",
-        "Velocity I": "./json/colortables/Velocity/Velocity I.pal"
+        "Default": "../json/colortables/Velocity/Default.pal",
+        "Velocity I": "../json/colortables/Velocity/Velocity I.pal"
     },
     "Differental Reflectivity": {
-        "Default": "./json/colortables/DF/Default.pal"
+        "Default": "../json/colortables/DF/Default.pal"
     },
     "Correlation Coeffecient": {
-        "Default": "./json/colortables/CC/Default.pal"
+        "Default": "../json/colortables/CC/Default.pal"
     },
     "Digital Precipitation": {
-        "Default": "./json/colortables/DTA/Default.pal"
+        "Default": "../json/colortables/DTA/Default.pal"
     }
 }

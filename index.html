@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CCDrop</title>
+    <title>Deluge</title>
 
     <!-- Mapbox -->
 
@@ -32,15 +32,24 @@
 
     <script src="https://cdn.jsdelivr.net/npm/pako@2.2.0/dist/pako.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/antimatter15/bzip2.js@master/bzip2.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- Meta Tags -->
-     
-    <meta type="date" content="2026-07-16"/>
+    
+    <meta name="description" content="Deluge is a live weather radar app with automatically updating weather alerts and can display detailed information at a glance. View for free today! (This was not written by AI.)">
+    <meta name="robots" content="index, follow">
+    <meta type="date" content="2026-07-20"/>
     <meta name="author" content="JesseWx2011"/>
 
 </head>
 
 <body>
+    <!-- Loading Overlay -->
+    <div class="loadingOverlay" id="loadingOverlay">
+        <div class="loadingSpinner"></div>
+        <div class="loadingText">Loading...</div>
+    </div>
+
     <!-- UI START -->
     <div class="top-ui" id="topUi">
             <div class="search">
@@ -83,6 +92,10 @@
       </div>
       <div class="menuItem" id="stormTracksToggle">
           <span><i class="fa-solid fa-arrow-trend-up"></i> Storm Tracks</span>
+          <div class="toggleSwitch"></div>
+      </div>
+      <div class="menuItem" id="lightningToggle">
+          <span><i class="fa-solid fa-bolt"></i> Lightning</span>
           <div class="toggleSwitch"></div>
       </div>
   </div>
@@ -274,7 +287,9 @@
 
     <!-- Colortables • Initially hidden until a proudct is selected. -->
     <div class="right-ui" id="rightUI">
-        <div class="colortable" id="colortable"></div>
+        <div class="colortable" id="colortable">
+            <div class="colortable-tooltip" id="colortableTooltip">--</div>
+        </div>
         <div class="tickMarks" id="ticks">
             <ul>-20</ul>
             <ul>-10</ul>
@@ -299,13 +314,57 @@
                 <span style="opacity: 0.6;">•</span>
                 <div class="productSelected" id="selectedProduct">----</div>
             </div>
-            <i class="fa-solid fa-chevron-down" id="expandToggle" style="font-size: 0.8rem; opacity: 0.7; transition: transform 0.4s ease;"></i>
+            <div style="display: flex; flex-direction: row; gap: 8px; align-items: center;">
+                <div class="tiltDropdown" id="tiltDropdown" style="display: none;">
+                    <select class="tiltSelect" id="tiltSelect">
+                        <option value="N0B">Tilt 1</option>
+                        <option value="NAB">Tilt 2</option>
+                        <option value="N1B">Tilt 3</option>
+                        <option value="NBB">Tilt 4</option>
+                        <option value="N2B">Tilt 5</option>
+                        <option value="N3B">Tilt 6</option>
+                    </select>
+                </div>
+                <i class="fa-solid fa-chevron-down" id="expandToggle" style="font-size: 0.8rem; opacity: 0.7; transition: transform 0.4s ease;"></i>
+            </div>
         </div>
         <div class="scanTime" id="scanTime"></div>
         <div class="timelineContainer" id="timelineContainer">
             <div class="timelineLabel" id="timelineLabel">Latest</div>
             <input type="range" class="timelineSlider" id="timelineSlider" min="0" max="19" step="1" value="0">
             <div class="timelineTicks" id="timelineTicks"></div>
+            <div class="timelineProgress" id="timelineProgress">
+                <div class="timelineProgressBar" id="timelineProgressBar"></div>
+            </div>
+            <div class="timelineProgressText" id="timelineProgressText"></div>
+        </div>
+        <div class="toolsSection">
+            <div class="toolsLabel">Tools</div>
+            <div class="toolsContainer">
+                <button class="toolButton" id="measureTool" title="Measure Distance">
+                    <i class="fa-solid fa-ruler"></i>
+                    <span>Measure</span>
+                </button>
+                <button class="toolButton" id="drawTool" title="Draw on Map">
+                    <i class="fa-solid fa-pencil"></i>
+                    <span>Draw</span>
+                </button>
+            </div>
+            <div class="drawControls" id="drawControls" style="display: none;">
+                <div class="drawControlRow">
+                    <label class="drawControlLabel">Color:</label>
+                    <input type="color" id="drawColorPicker" value="#ff6b35" class="drawColorPicker">
+                </div>
+                <div class="drawControlRow">
+                    <label class="drawControlLabel">Thickness:</label>
+                    <input type="range" id="drawThicknessSlider" min="1" max="10" value="3" class="drawThicknessSlider">
+                    <span class="drawThicknessValue" id="drawThicknessValue">3px</span>
+                </div>
+                <button class="drawClearButton" id="drawClearButton">
+                    <i class="fa-solid fa-trash"></i>
+                    <span>Clear Drawing</span>
+                </button>
+            </div>
         </div>
         <div class="products" id="productsMenu">
             <!-- NEXRAD -->
@@ -338,6 +397,8 @@
     <script src="./js/settings.js"></script>
     <script src="./js/menu.js"></script>
     <script src="./js/animation.js"></script>
+    <script src="./js/tools.js"></script>
+    <script src="./js/lightning.js"></script>
 </body>
 
 <script>

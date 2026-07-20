@@ -1,1 +1,11 @@
-/* Eventually going to migrate map.js logic over here */
+// For handling layers.
+/*
+  The Following Layers are:
+  
+  - Storm Reports
+  - Cameras
+  - NEXRAD Radar
+  - Alerts (Borders Above Radar)
+  - Lightning (Blitzortung USA)
+
+*/

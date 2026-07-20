@@ -29,6 +29,9 @@ const alertColors = {
 let alertFillOpacity = 0.6;
 let alertLineOpacity = 1;
 
+// Track previous alerts for flash effect
+let previousAlertFeatures = new Map();
+
 // Builds the Mapbox "case" expression used for both fill-color and line-color.
 // Pulling this out (instead of writing the case expression twice, inline) means
 // changing a color in alertColors just needs a fresh call to this + setPaintProperty.
@@ -500,13 +503,47 @@ function computeAlertDetails(properties) {
         if (tornadoSource) details.push({ label: 'Source', value: tornadoSource });
         if (hailText) details.push({ label: 'Hail', value: hailText });
     } else if (normalizedEvent === 'Severe Thunderstorm Warning') {
-        if (windText) details.push({ label: 'Wind', value: `${windText}` });
-        else if (windThreat) details.push({ label: 'Wind Threat', value: windThreat });
-        if (hailText !== null) details.push({ label: 'Hail', value: hailText });
-        else if (hailThreat) details.push({ label: 'Hail Threat', value: hailThreat });
+        if (windText) {
+            const windValue = parseNumericValue(windText);
+            details.push({ 
+                label: 'Wind', 
+                value: `${windText}`,
+                chart: windValue !== null ? generateWindChart(windValue) : null
+            });
+        } else if (windThreat) {
+            details.push({ label: 'Wind Threat', value: windThreat });
+        }
+        if (hailText !== null) {
+            const hailValue = parseNumericValue(hailText);
+            details.push({ 
+                label: 'Hail', 
+                value: hailText,
+                chart: hailValue !== null ? generateHailChart(hailValue) : null
+            });
+        } else if (hailThreat) {
+            details.push({ label: 'Hail Threat', value: hailThreat });
+        }
     } else if (normalizedEvent === 'Flash Flood Warning') {
         if (flashSource) details.push({ label: 'Source', value: formatFlashFloodSource(flashSource) });
         if (rainfallRate) details.push({ label: 'RR', value: rainfallRate });
+    } else if (normalizedEvent === 'Special Weather Statement') {
+        // Show wind gusts and hail size for Special Weather Statements
+        if (windText) {
+            const windValue = parseNumericValue(windText);
+            details.push({ 
+                label: 'Wind Gusts', 
+                value: `${windText}`,
+                chart: windValue !== null ? generateWindChart(windValue) : null
+            });
+        }
+        if (hailText !== null && hailText !== 'None') {
+            const hailValue = parseNumericValue(hailText);
+            details.push({ 
+                label: 'Hail Size', 
+                value: hailText,
+                chart: hailValue !== null ? generateHailChart(hailValue) : null
+            });
+        }
     }
 
     details.push({
@@ -515,6 +552,42 @@ function computeAlertDetails(properties) {
     });
 
     return details;
+}
+
+// Generate wind speed scale chart (58-100+ MPH)
+function generateWindChart(windMph) {
+    const minWind = 58;
+    const maxWind = 100;
+    const percentage = Math.min(100, Math.max(0, ((windMph - minWind) / (maxWind - minWind)) * 100));
+    
+    let color = '#22c55e'; // Green for lower end
+    if (percentage >= 50) color = '#eab308'; // Yellow for middle
+    if (percentage >= 75) color = '#f97316'; // Orange for high
+    if (percentage >= 90) color = '#ef4444'; // Red for extreme
+    
+    return {
+        percentage,
+        color,
+        label: `${windMph} MPH`
+    };
+}
+
+// Generate hail size scale chart (0.25"-4"+)
+function generateHailChart(hailInches) {
+    const minHail = 0.25;
+    const maxHail = 4;
+    const percentage = Math.min(100, Math.max(0, ((hailInches - minHail) / (maxHail - minHail)) * 100));
+    
+    let color = '#22c55e'; // Green for smaller hail
+    if (percentage >= 40) color = '#eab308'; // Yellow for medium
+    if (percentage >= 70) color = '#f97316'; // Orange for large
+    if (percentage >= 85) color = '#ef4444'; // Red for very large
+    
+    return {
+        percentage,
+        color,
+        label: `${hailInches}"`
+    };
 }
 
 // Lightens a "#rrggbb" hex color by the given percent (0-100), used to build
@@ -571,9 +644,22 @@ function openAlertModal(properties) {
 
     titleEl.textContent = content.title;
     headerEl.style.background = content.headerGradient;
-    chipsEl.innerHTML = content.chips.map(chip =>
-        `<div class="alertModalChip">${chip.label}: ${chip.value}</div>`
-    ).join('');
+    chipsEl.innerHTML = content.chips.map(chip => {
+        let chartHtml = '';
+        if (chip.chart) {
+            chartHtml = `
+                    <div class="alertPropertyChart">
+                        <div class="alertPropertyChartBar" style="width: ${chip.chart.percentage}%; background: ${chip.chart.color};">
+                            <span class="alertPropertyChartLabel">${chip.chart.label}</span>
+                        </div>
+                    </div>`;
+        }
+        return `
+                    <div class="alertModalChip" style="display: flex; flex-direction: column; gap: 4px;">
+                        <span>${chip.label}: ${chip.value}</span>
+                        ${chartHtml}
+                    </div>`;
+    }).join('');
     bodyEl.textContent = content.bodyText;
 
     container.style.display = 'flex';
@@ -586,6 +672,14 @@ function closeAlertModal() {
 
 window.openAlertModal = openAlertModal;
 window.closeAlertModal = closeAlertModal;
+
+// Function to open alert modal from popup click
+window.openAlertModalFromPopup = function(alertId) {
+    const properties = window.alertPopupData && window.alertPopupData[alertId];
+    if (properties) {
+        openAlertModal(properties);
+    }
+};
 
 function buildAlertPopup(properties) {
     const normalizedEvent = normalizeEvent(properties.event);
@@ -602,11 +696,28 @@ function buildAlertPopup(properties) {
 
     const bannerColor = getBannerColor(normalizedEvent);
     const details = computeAlertDetails(properties);
-    const detailRows = details.map(detail => `
+    const detailRows = details.map(detail => {
+        let chartHtml = '';
+        if (detail.chart) {
+            chartHtml = `
+                    <div class="alertPropertyChart">
+                        <div class="alertPropertyChartBar" style="width: ${detail.chart.percentage}%; background: ${detail.chart.color};">
+                            <span class="alertPropertyChartLabel">${detail.chart.label}</span>
+                        </div>
+                    </div>`;
+        }
+        return `
                     <div class="alertPopupRow">
                         <span class="alertPopupLabel">${detail.label}:</span>
                         <span class="alertPopupValue">${detail.value}</span>
-                    </div>`).join('');
+                    </div>
+                    ${chartHtml}`;
+    }).join('');
+
+    // Store properties globally for the modal to access
+    const alertId = 'alert-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    window.alertPopupData = window.alertPopupData || {};
+    window.alertPopupData[alertId] = properties;
 
     return `
         <div class="alertPopup">
@@ -617,7 +728,7 @@ function buildAlertPopup(properties) {
                         <div class="alertPopupTitle">${normalizedEvent}</div>
                         ${locationText ? `<div class="alertPopupLocation">${locationText}</div>` : ''}
                     </div>
-                    <div class="alertPopupInfo"><i class="fa-solid fa-circle-info"></i></div>
+                    <div class="alertPopupInfo" onclick="window.openAlertModalFromPopup('${alertId}')"><i class="fa-solid fa-circle-info"></i></div>
                 </div>
                 ${bannerText ? `<div class="alertPopupBanner" style="background: ${bannerColor};">${bannerText}</div>` : ''}
                 <div class="alertPopupDetails">${detailRows}
@@ -705,6 +816,25 @@ function ensureRadarLayerOrder() {
 window.ensureRadarLayerOrder = ensureRadarLayerOrder;
 
 function addAlertsLayer(alertData) {
+    // Detect updated/new alerts for flash effect
+    const newAlertFeatures = new Map();
+    const updatedAlertIds = new Set();
+    
+    alertData.features.forEach(feature => {
+        const id = feature.properties.id || feature.id;
+        if (id) {
+            newAlertFeatures.set(id, feature);
+            
+            // Check if this alert is new or updated
+            const previousFeature = previousAlertFeatures.get(id);
+            if (!previousFeature || JSON.stringify(previousFeature) !== JSON.stringify(feature)) {
+                updatedAlertIds.add(id);
+            }
+        }
+    });
+    
+    // Update previous alerts
+    previousAlertFeatures = newAlertFeatures;
 
     if (map.getSource('alerts')) {
         if (map.getLayer('alerts-layer')) {
@@ -716,36 +846,84 @@ function addAlertsLayer(alertData) {
         map.removeSource('alerts');
     }
 
-    // Add alerts source
+    // Add alerts source with flash property for updated alerts
+    const alertDataWithFlash = {
+        ...alertData,
+        features: alertData.features.map(feature => {
+            const id = feature.properties.id || feature.id;
+            return {
+                ...feature,
+                properties: {
+                    ...feature.properties,
+                    _flash: updatedAlertIds.has(id) ? 1 : 0
+                }
+            };
+        })
+    };
+    
     map.addSource('alerts', {
         'type': 'geojson',
-        'data': alertData
+        'data': alertDataWithFlash
     });
 
-    // Add alerts layer with color based on event type
+    // Add alerts layer with color based on event type and flash effect
     map.addLayer({
         'id': 'alerts-layer',
         'type': 'fill',
         'source': 'alerts',
         'paint': {
-            'fill-color': buildAlertColorExpression(),
-            'fill-opacity': alertFillOpacity
+            'fill-color': [
+                'case',
+                ['==', ['get', '_flash'], 1],
+                '#ffffff',
+                buildAlertColorExpression()
+            ],
+            'fill-opacity': [
+                'case',
+                ['==', ['get', '_flash'], 1],
+                0.8,
+                alertFillOpacity
+            ]
         }
     }, 'road-minor');
 
-    // Add outline layer for polygons
+    // Add outline layer for polygons with flash effect
     map.addLayer({
         'id': 'alerts-outline',
         'type': 'line',
         'source': 'alerts',
         'paint': {
-            'line-color': buildAlertColorExpression(),
+            'line-color': [
+                'case',
+                ['==', ['get', '_flash'], 1],
+                '#ffffff',
+                buildAlertColorExpression()
+            ],
             'line-width': 3.5,
-            'line-opacity': alertLineOpacity
+            'line-opacity': [
+                'case',
+                ['==', ['get', '_flash'], 1],
+                1,
+                alertLineOpacity
+            ]
         }
     }, 'road-minor');
 
     ensureRadarLayerOrder();
+    
+    // Remove flash effect after 1 second by resetting paint properties
+    if (updatedAlertIds.size > 0) {
+        setTimeout(() => {
+            if (map.getLayer('alerts-layer')) {
+                map.setPaintProperty('alerts-layer', 'fill-color', buildAlertColorExpression());
+                map.setPaintProperty('alerts-layer', 'fill-opacity', alertFillOpacity);
+            }
+            if (map.getLayer('alerts-outline')) {
+                map.setPaintProperty('alerts-outline', 'line-color', buildAlertColorExpression());
+                map.setPaintProperty('alerts-outline', 'line-opacity', alertLineOpacity);
+            }
+        }, 1000);
+    }
 
     // Handle alert polygon clicks — show popup first, click info icon for full modal
     map.on('click', 'alerts-layer', (e) => {
@@ -761,16 +939,6 @@ function addAlertsLayer(alertData) {
             .setLngLat(e.lngLat)
             .setHTML(popupHtml)
             .addTo(map);
-            
-            // Add click handler to info icon to open full modal
-            setTimeout(() => {
-                const infoIcon = document.querySelector('.alertPopupInfo');
-                if (infoIcon) {
-                    infoIcon.addEventListener('click', () => {
-                        openAlertModal(properties);
-                    });
-                }
-            }, 100);
         }
     });
 
@@ -788,16 +956,6 @@ function addAlertsLayer(alertData) {
             .setLngLat(e.lngLat)
             .setHTML(popupHtml)
             .addTo(map);
-            
-            // Add click handler to info icon to open full modal
-            setTimeout(() => {
-                const infoIcon = document.querySelector('.alertPopupInfo');
-                if (infoIcon) {
-                    infoIcon.addEventListener('click', () => {
-                        openAlertModal(properties);
-                    });
-                }
-            }, 100);
         }
     });
 
