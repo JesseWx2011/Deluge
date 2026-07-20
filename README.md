@@ -1,11 +1,11 @@
 # Deluge
-Deluge is a minimal weather app for all devices, including base features such as outlooks, radar, navigation with weather updates, and more is to be added in the future.
+Deluge is a minimal weather app for all devices, including base features such as outlooks, radar, and more.
 
-Deluge is currently in version ALPHA.
+Deluge is currently in version BETA IV.
 
 <h2>Version</h2>
 
-The Current Version of this application is ALPHA Version 2.
+The Current Version of this application is BETA IV.
 Changelogs can be found in the "Releases" tab.
 
 <h2>Creators and Contributors</h2>
@@ -27,3 +27,10 @@ JesseWx2011 (Jesse Hasty) is a young content creator, programmer in Python, HTML
 <h2>Open Source</h2>
 
 This project is Open Source, meaning that the code in this project is reusable, under License CC0 1.0 Universal.
+
+<h2>References</h2>
+<p>This project used the following references during the development of this project:</p>
+
+<li>><a href="https://github.com/SteepAtticStairs">SteepAtticStairs</a> - <a href="https://github.com/SteepAtticStairs/AtticRadar">AtticRadar</a></li>
+<li><a href="https://github.com/dpaulat">dpaulat</a> - <a href="https://github.com/dpaulat/supercell-wx">Supercell Wx</a></li>
+<li><a href="https://github.com/Unidata">Unidata</a> - <a href="https://github.com/Unidata/MetPy">MetPy</a></li>
