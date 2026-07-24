@@ -3,17 +3,14 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deluge</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Deluge - Weather Radar</title>
 
     <!-- Mapbox -->
-
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.css" rel="stylesheet">
-
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.js"></script>
 
     <!-- FontAwesome -->
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
     <link rel="stylesheet" href="./css/main.css">
@@ -25,35 +22,44 @@
     <link rel="icon" type="image/x-icon" src="./favicon.ico"/>
 
     <!-- Bootstrap -->
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/pako@2.2.0/dist/pako.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/antimatter15/bzip2.js@master/bzip2.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
+    <!-- bzip2 -->
+     <script src="https://cdn.jsdelivr.net/npm/bzip2-wasm@1.0.1/index.min.js"></script>
+ 
+
     <!-- Meta Tags -->
-    
-    <meta name="description" content="Deluge is a live weather radar app with automatically updating weather alerts and can display detailed information at a glance. View for free today! (This was not written by AI.)">
+    <meta name="description" content="Deluge is a live weather radar app with automatically updating weather alerts and can display detailed information at a glance. View for free today!">
     <meta name="robots" content="index, follow">
-    <meta type="date" content="2026-07-20"/>
+    <meta type="date" content="2026-07-21"/>
     <meta name="author" content="JesseWx2011"/>
 
 </head>
 
 <body>
-    <!-- Loading Overlay -->
+    <!-- Enhanced Loading Overlay with Fun Facts -->
     <div class="loadingOverlay" id="loadingOverlay">
-        <div class="loadingSpinner"></div>
-        <div class="loadingText">Loading...</div>
+        <div class="loadingContainer">
+            <div class="loadingIcon"><img id="loadingIcon" src="https://basmilius.github.io/meteocons/production/fill/svg/tornado.svg"></div>
+            <div class="loadingText">Initializing Deluge...</div>
+            <div class="loadingFact" id="loadingFact">Did you know? There are an average of ~1,200 tornadoes per year in the United States.</div>
+            <div class="loadingProgress">
+                <div class="loadingProgressBar" id="loadingProgressBar"></div>
+            </div>
+            <div class="loadingStatus" id="loadingStatus">Testing radar connection...</div>
+        </div>
     </div>
 
     <!-- UI START -->
     <div class="top-ui" id="topUi">
             <div class="search">
                 <input type="text" class="searchBar" id="searchBar" placeholder="Search for a location...">
+                <div class="searchResults" id="searchResults" style="display: none;"></div>
             </div>
             <div class="button-container selected" data-mode="radar">
                 <i class="fa-solid fa-satellite-dish" style="color: rgb(255, 255, 255);"></i>
@@ -71,9 +77,6 @@
 
    <div class="tl-ui" id="topleftUi">
   <div class="tl-ui-header">
-    <button class="tl-ui-layers-btn" id="layersButton" aria-label="Layers" onclick="event.stopPropagation();">
-        <i class="fa-solid fa-layer-group"></i>
-    </button>
     <span class="tl-ui-title" onclick="document.getElementById('topleftUi').classList.toggle('open')">Settings | Info</span>
     <span class="tl-ui-arrow" onclick="document.getElementById('topleftUi').classList.toggle('open')"></span>
   </div>
@@ -81,6 +84,15 @@
     <div class="tl-ui-option" onclick="messageModal()">View Radar Message</div>
     <div class="tl-ui-option" onclick="userLocs()">My Locations</div>
   </div>
+
+  <!-- Layers now live in their own row below the Settings/Info panel, behind a hamburger icon -->
+  <div class="tl-ui-layers-row" id="layersRow">
+    <button class="tl-ui-layers-btn" id="layersButton" aria-label="Map layers">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+    <span class="tl-ui-layers-text">Map Layers</span>
+  </div>
+
   <div class="layersDropdown" id="layersDropdown">
       <div class="menuItem" id="camerasToggle">
           <span><i class="fa-solid fa-video"></i> Camera Overlays</span>
@@ -98,8 +110,50 @@
           <span><i class="fa-solid fa-bolt"></i> Lightning</span>
           <div class="toggleSwitch"></div>
       </div>
+      <div class="menuDivider"></div>
+      <div class="menuItem" id="mesoscaleToggle">
+          <span><i class="fa-solid fa-circle-exclamation"></i> Mesoscale Discussions</span>
+          <div class="toggleSwitch"></div>
+      </div>
+      <div class="menuItem" id="lsrToggle">
+          <span><i class="fa-solid fa-list-check"></i> Storm Reports</span>
+          <div class="toggleSwitch"></div>
+      </div>
+      <div class="menuItem" id="nhcConeToggle">
+          <span><i class="fa-solid fa-hurricane"></i> NHC Cone</span>
+          <div class="toggleSwitch"></div>
+      </div>
   </div>
 </div>
+
+    <!-- Top-right settings menu -->
+    <div class="menuWrapper">
+        <button class="menuButton" id="settingsButton" aria-label="Settings">
+            <i class="fa-solid fa-gear"></i>
+        </button>
+    </div>
+
+<!-- Welcome Modal -->
+
+<div class="modal-container welcomeModalContainer" id="welcomeModalContainer" style="display: none;" onclick="if (event.target === this) closeWelcomeModal();">
+    <div class="welcomeModal" id="welcomeModal" role="dialog" aria-labelledby="welcomeModalTitle">
+        <div class="welcomeModalGlow"></div>
+        <button class="settingsModalClose welcomeModalClose" onclick="closeWelcomeModal()" aria-label="Close">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="welcomeModalIcon"><i class="fa-solid fa-cloud-bolt"></i></div>
+        <h1 class="welcomeModalTitle" id="welcomeModalTitle">Welcome to Deluge!</h1>
+        <div class="welcomeModalBody">
+            <p>Hi, and welcome to my program Deluge. I am Jesse, the author and creator of this program. I first began developing this back in August of 2025. After many failed attempts, I finally got a working result.</p>
+            <p>This program is 100% Free and is built for either a professional or an average user. I hope you enjoy my program.</p>
+        </div>
+        <button class="welcomeModalButton" onclick="closeWelcomeModal()">
+            <i class="fa-solid fa-satellite-dish"></i> Start exploring
+        </button>
+    </div>
+</div>
+
+<!-- End of Welcome Modal -->
 
 <!-- Message Modal -->
 
@@ -138,14 +192,53 @@
 
 <!-- End of Alert Modal -->
 
-    <!-- Top-right settings menu -->
-    <div class="menuWrapper">
-        <button class="menuButton" id="settingsButton" aria-label="Settings">
-            <i class="fa-solid fa-gear"></i>
-        </button>
+<!-- My Locations Modal -->
+
+<div class="modal-container" id="locationsModalContainer" style="display: none;" onclick="if (event.target === this) closeLocationsModal();">
+    <div class="settingsModal locationsModal" id="locationsModal">
+        <div class="settingsModalHeader">
+            <h2>My Locations</h2>
+            <button class="settingsModalClose" onclick="closeLocationsModal()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="settingsModalBody">
+            <div class="locationsSearchSection">
+                <input type="text" id="locationSearchInput" class="locationSearchInput" placeholder="Search for a location...">
+                <div class="locationSearchResults" id="locationSearchResults"></div>
+            </div>
+            <div class="locationsIconSection">
+                <div class="locationsIconLabel">Select Icon:</div>
+                <div class="iconOptions">
+                    <div class="iconOption" data-icon="home" onclick="selectIcon('home')">
+                        <i class="fa-solid fa-home"></i>
+                    </div>
+                    <div class="iconOption" data-icon="star" onclick="selectIcon('star')">
+                        <i class="fa-solid fa-star"></i>
+                    </div>
+                    <div class="iconOption" data-icon="map-pin" onclick="selectIcon('map-pin')">
+                        <i class="fa-solid fa-map-pin"></i>
+                    </div>
+                    <div class="iconOption" data-icon="location-dot" onclick="selectIcon('location-dot')">
+                        <i class="fa-solid fa-location-dot"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="locationsInputSection">
+                <input type="text" id="locationName" class="locationNameInput" placeholder="Name this location...">
+                <button class="addLocationButton" onclick="addLocation()">
+                    <i class="fa-solid fa-plus"></i> Add Location
+                </button>
+            </div>
+            <div class="locationsList" id="locationsList"></div>
+        </div>
     </div>
+</div>
+
+<!-- End My Locations Modal -->
 
     <!-- Settings Modal -->
+
     <div class="modal-container" id="settingsModalContainer" style="display: none;" onclick="if (event.target === this) closeSettingsModal();">
         <div class="settingsModal" id="settingsModal">
             <div class="settingsModalHeader">
@@ -269,6 +362,8 @@
         </div>
     </div>
 
+    <!-- End Settings Modal -->
+
     <!-- Outlooks navigation -->
     <div class="outlookNav" id="outlookNav">
         <div class="outlookNavIcon"><i class="fa-regular fa-map"></i></div>
@@ -285,7 +380,7 @@
         <div id="outlookCityList" class="outlookCityList"></div>
     </div>
 
-    <!-- Colortables • Initially hidden until a proudct is selected. -->
+    <!-- Colortables • Initially hidden until a product is selected. -->
     <div class="right-ui" id="rightUI">
         <div class="colortable" id="colortable">
             <div class="colortable-tooltip" id="colortableTooltip">--</div>
@@ -337,15 +432,30 @@
                 <div class="timelineProgressBar" id="timelineProgressBar"></div>
             </div>
             <div class="timelineProgressText" id="timelineProgressText"></div>
+            <div class="playbackControls" id="playbackControls">
+                <button class="playbackButton" id="playbackToggle" title="Play radar loop" aria-label="Play radar loop" disabled>
+                    <i class="fa-solid fa-play" id="playbackIcon"></i>
+                </button>
+                <div class="playbackSpeedWrap">
+                    <label class="playbackSpeedLabel" for="playbackSpeed">Speed</label>
+                    <select class="playbackSpeed" id="playbackSpeed" aria-label="Playback speed">
+                        <option value="800">0.5x</option>
+                        <option value="400" selected>1x</option>
+                        <option value="200">2x</option>
+                        <option value="100">4x</option>
+                    </select>
+                </div>
+                <div class="playbackFrameLabel" id="playbackFrameLabel">--</div>
+            </div>
         </div>
         <div class="toolsSection">
             <div class="toolsLabel">Tools</div>
             <div class="toolsContainer">
-                <button class="toolButton" id="measureTool" title="Measure Distance">
+                <button class="toolButton" id="measureTool" title="Drag on the map to measure a radius">
                     <i class="fa-solid fa-ruler"></i>
                     <span>Measure</span>
                 </button>
-                <button class="toolButton" id="drawTool" title="Draw on Map">
+                <button class="toolButton" id="drawTool" title="Drag on the map to draw freehand">
                     <i class="fa-solid fa-pencil"></i>
                     <span>Draw</span>
                 </button>
@@ -360,6 +470,10 @@
                     <input type="range" id="drawThicknessSlider" min="1" max="10" value="3" class="drawThicknessSlider">
                     <span class="drawThicknessValue" id="drawThicknessValue">3px</span>
                 </div>
+                <button class="drawClearButton" id="drawUndoButton">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>Undo Stroke</span>
+                </button>
                 <button class="drawClearButton" id="drawClearButton">
                     <i class="fa-solid fa-trash"></i>
                     <span>Clear Drawing</span>
@@ -386,8 +500,6 @@
     <!-- UI END -->
     <div id="map" style="position: absolute; top: 0; bottom: 0; left: 0; width: 100%;"></div>
 
-
-    
     <script src="./js/map.js"></script>
     <script src="./js/nexrad-render.js"></script>
     <script type="module" src="./js/nexrad.js"></script>
@@ -398,7 +510,12 @@
     <script src="./js/menu.js"></script>
     <script src="./js/animation.js"></script>
     <script src="./js/tools.js"></script>
+    <script src="./js/welcome.js"></script>
     <script src="./js/lightning.js"></script>
+    <script src="./js/extra-layers.js"></script>
+    <script src="./js/context-menu.js"></script>
+    <script src="./js/loading.js"></script>
+    <script src="./js/search.js"></script>
 </body>
 
 <script>

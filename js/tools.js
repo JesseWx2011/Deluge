@@ -1,15 +1,30 @@
 // Tools functionality for Deluge
+//
+// Both tools are drag driven: press (mouse or finger) and move across the map.
+// Draw paints a freehand stroke, measure grows a circle from the press point
+// and labels its radius, the way a range ring reads on a radar display.
+
 let measureMode = false;
 let drawMode = false;
-let measurePoints = [];
-let drawPoints = [];
-let measureMarker = null;
-let measureLine = null;
-let measurePopup = null;
+
+// Finished strokes plus the one currently under the pointer.
+let drawStrokes = [];
+let activeStroke = null;
 let drawSource = null;
-let drawLayer = null;
 let drawColor = '#ff6b35';
 let drawThickness = 3;
+
+let measureCenter = null;
+let measureRadiusKm = 0;
+let measureMarker = null;
+let measureLabel = null;
+let measureLabelEl = null;
+
+const MEASURE_CIRCLE_STEPS = 128;
+const MEASURE_SOURCE = 'measure-source';
+const MEASURE_FILL_LAYER = 'measure-fill';
+const MEASURE_OUTLINE_LAYER = 'measure-outline';
+const MEASURE_RADIUS_LAYER = 'measure-radius-line';
 
 // Initialize tools
 function initTools() {
@@ -18,22 +33,23 @@ function initTools() {
     const drawColorPicker = document.getElementById('drawColorPicker');
     const drawThicknessSlider = document.getElementById('drawThicknessSlider');
     const drawClearButton = document.getElementById('drawClearButton');
+    const drawUndoButton = document.getElementById('drawUndoButton');
     const drawThicknessValue = document.getElementById('drawThicknessValue');
-    
+
     if (measureTool) {
         measureTool.addEventListener('click', toggleMeasureTool);
     }
-    
+
     if (drawTool) {
         drawTool.addEventListener('click', toggleDrawTool);
     }
-    
+
     if (drawColorPicker) {
         drawColorPicker.addEventListener('input', (e) => {
             updateDrawColor(e.target.value);
         });
     }
-    
+
     if (drawThicknessSlider) {
         drawThicknessSlider.addEventListener('input', (e) => {
             const thickness = e.target.value;
@@ -43,32 +59,55 @@ function initTools() {
             }
         });
     }
-    
+
     if (drawClearButton) {
         drawClearButton.addEventListener('click', clearDrawing);
+    }
+
+    if (drawUndoButton) {
+        drawUndoButton.addEventListener('click', undoStroke);
+    }
+}
+
+// Prevents the map from panning while a tool owns the drag gesture.
+function setMapDragging(enabled) {
+    if (enabled) {
+        map.dragPan.enable();
+        map.dragRotate.enable();
+        map.touchZoomRotate.enable();
+    } else {
+        map.dragPan.disable();
+        map.dragRotate.disable();
+        map.touchZoomRotate.disable();
     }
 }
 
 // Toggle measure tool
 function toggleMeasureTool() {
     measureMode = !measureMode;
-    
-    // Disable draw mode if measure mode is enabled
+
     if (measureMode && drawMode) {
         drawMode = false;
         document.getElementById('drawTool')?.classList.remove('active');
-        clearDrawing();
+        const drawControls = document.getElementById('drawControls');
+        if (drawControls) drawControls.style.display = 'none';
+        detachDrawHandlers();
     }
-    
+
     const measureBtn = document.getElementById('measureTool');
     measureBtn?.classList.toggle('active', measureMode);
-    
+
     if (measureMode) {
         map.getCanvas().style.cursor = 'crosshair';
-        map.on('click', handleMeasureClick);
+        setMapDragging(false);
+        initMeasureLayers();
+        map.on('mousedown', startMeasure);
+        map.on('touchstart', startMeasure);
     } else {
         map.getCanvas().style.cursor = '';
-        map.off('click', handleMeasureClick);
+        setMapDragging(true);
+        map.off('mousedown', startMeasure);
+        map.off('touchstart', startMeasure);
         clearMeasurement();
     }
 }
@@ -76,143 +115,100 @@ function toggleMeasureTool() {
 // Toggle draw tool
 function toggleDrawTool() {
     drawMode = !drawMode;
-    
-    // Disable measure mode if draw mode is enabled
+
     if (drawMode && measureMode) {
         measureMode = false;
         document.getElementById('measureTool')?.classList.remove('active');
+        map.off('mousedown', startMeasure);
+        map.off('touchstart', startMeasure);
         clearMeasurement();
     }
-    
+
     const drawBtn = document.getElementById('drawTool');
     drawBtn?.classList.toggle('active', drawMode);
-    
-    // Show/hide draw controls
+
     const drawControls = document.getElementById('drawControls');
     if (drawControls) {
         drawControls.style.display = drawMode ? 'flex' : 'none';
     }
-    
+
     if (drawMode) {
         map.getCanvas().style.cursor = 'crosshair';
-        map.dragPan.disable();
-        map.scrollZoom.disable();
-        map.doubleClickZoom.disable();
+        setMapDragging(false);
         initDrawLayer();
-        map.on('click', handleDrawClick);
+        map.on('mousedown', startStroke);
+        map.on('touchstart', startStroke);
     } else {
         map.getCanvas().style.cursor = '';
-        map.dragPan.enable();
-        map.scrollZoom.enable();
-        map.doubleClickZoom.enable();
-        map.off('click', handleDrawClick);
+        setMapDragging(true);
+        detachDrawHandlers();
     }
 }
 
-// Handle measure click
-function handleMeasureClick(e) {
-    if (!measureMode) return;
-    
-    const point = e.lngLat;
-    measurePoints.push(point);
-    
-    if (measurePoints.length === 1) {
-        // First point - add marker
-        measureMarker = new mapboxgl.Marker({
-            color: '#2229ff'
-        })
-        .setLngLat(point)
-        .addTo(map);
-    } else if (measurePoints.length === 2) {
-        // Second point - draw line and show distance
-        const start = measurePoints[0];
-        const end = measurePoints[1];
-        
-        // Calculate distance
-        const distance = calculateDistance(start.lat, start.lng, end.lat, end.lng);
-        
-        // Draw line
-        if (map.getSource('measure-line')) {
-            map.getSource('measure-line').setData({
-                type: 'Feature',
-                geometry: {
-                    type: 'LineString',
-                    coordinates: [[start.lng, start.lat], [end.lng, end.lat]]
-                }
-            });
-        } else {
-            map.addSource('measure-line', {
-                type: 'geojson',
-                data: {
-                    type: 'Feature',
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: [[start.lng, start.lat], [end.lng, end.lat]]
-                    }
-                }
-            });
-            
-            map.addLayer({
-                id: 'measure-line',
-                type: 'line',
-                source: 'measure-line',
-                layout: {
-                    'line-join': 'round',
-                    'line-cap': 'round'
-                },
-                paint: {
-                    'line-color': '#2229ff',
-                    'line-width': 3,
-                    'line-opacity': 0.8
-                }
-            });
-        }
-        
-        // Show popup with distance
-        const midpoint = [(start.lng + end.lng) / 2, (start.lat + end.lat) / 2];
-        measurePopup = new mapboxgl.Popup({ closeButton: true, closeOnClick: false })
-            .setLngLat(midpoint)
-            .setHTML(`
-                <div style="padding: 8px; font-family: 'Rubik', sans-serif;">
-                    <div style="font-weight: 600; color: white;">Distance</div>
-                    <div style="color: rgba(255,255,255,0.8); font-size: 14px;">
-                        ${distance.miles.toFixed(2)} mi<br>
-                        ${distance.km.toFixed(2)} km
-                    </div>
-                </div>
-            `)
-            .addTo(map);
-        
-        // Add end marker
-        new mapboxgl.Marker({
-            color: '#2229ff'
-        })
-        .setLngLat(end)
-        .addTo(map);
-        
-        // Reset for new measurement
-        measurePoints = [];
-        measureMarker = null;
-    }
+function detachDrawHandlers() {
+    map.off('mousedown', startStroke);
+    map.off('touchstart', startStroke);
+    map.off('mousemove', extendStroke);
+    map.off('touchmove', extendStroke);
+    map.off('mouseup', endStroke);
+    map.off('touchend', endStroke);
+    activeStroke = null;
 }
 
-// Handle draw click
-function handleDrawClick(e) {
+/* ----------------------- Freehand drawing ----------------------- */
+
+function startStroke(e) {
     if (!drawMode) return;
-    
+    e.preventDefault();
+
+    activeStroke = [[e.lngLat.lng, e.lngLat.lat]];
+    drawStrokes.push(activeStroke);
+
+    map.on('mousemove', extendStroke);
+    map.on('touchmove', extendStroke);
+    map.once('mouseup', endStroke);
+    map.once('touchend', endStroke);
+
+    renderStrokes();
+}
+
+function extendStroke(e) {
+    if (!activeStroke) return;
+    e.preventDefault();
+
     const point = [e.lngLat.lng, e.lngLat.lat];
-    drawPoints.push(point);
-    
-    // Update draw layer
-    if (drawSource) {
-        drawSource.setData({
-            type: 'Feature',
-            geometry: {
-                type: 'LineString',
-                coordinates: drawPoints
-            }
-        });
+    const last = activeStroke[activeStroke.length - 1];
+
+    // Skip sub-pixel jitter so the stroke stays light to render.
+    if (last && Math.abs(last[0] - point[0]) < 1e-6 && Math.abs(last[1] - point[1]) < 1e-6) return;
+
+    activeStroke.push(point);
+    renderStrokes();
+}
+
+function endStroke() {
+    map.off('mousemove', extendStroke);
+    map.off('touchmove', extendStroke);
+
+    // A tap without movement leaves a one-point line that renders as nothing.
+    if (activeStroke && activeStroke.length < 2) {
+        drawStrokes.pop();
+        renderStrokes();
     }
+
+    activeStroke = null;
+}
+
+function renderStrokes() {
+    if (!drawSource) return;
+
+    drawSource.setData({
+        type: 'Feature',
+        geometry: {
+            type: 'MultiLineString',
+            coordinates: drawStrokes.filter((stroke) => stroke.length > 1)
+        }
+    });
 }
 
 // Initialize draw layer
@@ -223,12 +219,12 @@ function initDrawLayer() {
             data: {
                 type: 'Feature',
                 geometry: {
-                    type: 'LineString',
+                    type: 'MultiLineString',
                     coordinates: []
                 }
             }
         });
-        
+
         map.addLayer({
             id: 'draw-layer',
             type: 'line',
@@ -240,73 +236,208 @@ function initDrawLayer() {
             paint: {
                 'line-color': drawColor,
                 'line-width': drawThickness,
-                'line-opacity': 0.8
+                'line-opacity': 0.9
             }
         });
     }
-    
+
     drawSource = map.getSource('draw-source');
-    drawLayer = map.getLayer('draw-layer');
-    
-    // Update paint properties with current settings
-    if (drawLayer) {
+
+    if (map.getLayer('draw-layer')) {
         map.setPaintProperty('draw-layer', 'line-color', drawColor);
         map.setPaintProperty('draw-layer', 'line-width', drawThickness);
     }
-}
 
-// Clear measurement
-function clearMeasurement() {
-    measurePoints = [];
-    
-    if (measureMarker) {
-        measureMarker.remove();
-        measureMarker = null;
-    }
-    
-    if (measurePopup) {
-        measurePopup.remove();
-        measurePopup = null;
-    }
-    
-    if (map.getLayer('measure-line')) {
-        map.removeLayer('measure-line');
-    }
-    
-    if (map.getSource('measure-line')) {
-        map.removeSource('measure-line');
-    }
+    renderStrokes();
 }
 
 // Clear drawing
 function clearDrawing() {
-    drawPoints = [];
-    
-    if (drawSource) {
-        drawSource.setData({
-            type: 'Feature',
-            geometry: {
-                type: 'LineString',
-                coordinates: []
-            }
-        });
-    }
+    drawStrokes = [];
+    activeStroke = null;
+    renderStrokes();
+}
+
+// Remove the most recent stroke
+function undoStroke() {
+    drawStrokes.pop();
+    renderStrokes();
 }
 
 // Update draw color
 function updateDrawColor(color) {
     drawColor = color;
-    if (drawLayer) {
+    if (map.getLayer('draw-layer')) {
         map.setPaintProperty('draw-layer', 'line-color', drawColor);
     }
 }
 
 // Update draw thickness
 function updateDrawThickness(thickness) {
-    drawThickness = parseInt(thickness);
-    if (drawLayer) {
+    drawThickness = parseInt(thickness, 10);
+    if (map.getLayer('draw-layer')) {
         map.setPaintProperty('draw-layer', 'line-width', drawThickness);
     }
+}
+
+/* ----------------------- Radius measuring ----------------------- */
+
+function initMeasureLayers() {
+    if (!map.getSource(MEASURE_SOURCE)) {
+        map.addSource(MEASURE_SOURCE, {
+            type: 'geojson',
+            data: emptyMeasureData()
+        });
+
+        map.addLayer({
+            id: MEASURE_FILL_LAYER,
+            type: 'fill',
+            source: MEASURE_SOURCE,
+            filter: ['==', '$type', 'Polygon'],
+            paint: {
+                'fill-color': '#2229ff',
+                'fill-opacity': 0.12
+            }
+        });
+
+        map.addLayer({
+            id: MEASURE_OUTLINE_LAYER,
+            type: 'line',
+            source: MEASURE_SOURCE,
+            filter: ['==', '$type', 'Polygon'],
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 2
+            }
+        });
+
+        map.addLayer({
+            id: MEASURE_RADIUS_LAYER,
+            type: 'line',
+            source: MEASURE_SOURCE,
+            filter: ['==', '$type', 'LineString'],
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': 1.5,
+                'line-dasharray': [2, 2]
+            }
+        });
+    }
+}
+
+function emptyMeasureData() {
+    return { type: 'FeatureCollection', features: [] };
+}
+
+function startMeasure(e) {
+    if (!measureMode) return;
+    e.preventDefault();
+
+    clearMeasurement();
+    initMeasureLayers();
+
+    measureCenter = e.lngLat;
+    measureRadiusKm = 0;
+
+    measureMarker = new mapboxgl.Marker({ color: '#2229ff' })
+        .setLngLat(measureCenter)
+        .addTo(map);
+
+    measureLabelEl = document.createElement('div');
+    measureLabelEl.className = 'measureRadiusLabel';
+    measureLabelEl.textContent = '0.0 mi';
+
+    measureLabel = new mapboxgl.Marker({ element: measureLabelEl })
+        .setLngLat(measureCenter)
+        .addTo(map);
+
+    map.on('mousemove', growMeasure);
+    map.on('touchmove', growMeasure);
+    map.once('mouseup', endMeasure);
+    map.once('touchend', endMeasure);
+}
+
+function growMeasure(e) {
+    if (!measureCenter) return;
+    e.preventDefault();
+
+    const edge = e.lngLat;
+    const distance = calculateDistance(measureCenter.lat, measureCenter.lng, edge.lat, edge.lng);
+    measureRadiusKm = distance.km;
+
+    const circle = circlePolygon(measureCenter, measureRadiusKm);
+
+    map.getSource(MEASURE_SOURCE)?.setData({
+        type: 'FeatureCollection',
+        features: [
+            { type: 'Feature', geometry: { type: 'Polygon', coordinates: [circle] }, properties: {} },
+            {
+                type: 'Feature',
+                geometry: {
+                    type: 'LineString',
+                    coordinates: [[measureCenter.lng, measureCenter.lat], [edge.lng, edge.lat]]
+                },
+                properties: {}
+            }
+        ]
+    });
+
+    if (measureLabelEl) {
+        measureLabelEl.textContent = `${distance.miles.toFixed(1)} mi`;
+        measureLabelEl.title = `${distance.km.toFixed(1)} km`;
+    }
+
+    if (measureLabel) {
+        // Sit the readout halfway along the radius, like a range ring callout.
+        measureLabel.setLngLat([
+            (measureCenter.lng + edge.lng) / 2,
+            (measureCenter.lat + edge.lat) / 2
+        ]);
+    }
+}
+
+function endMeasure() {
+    map.off('mousemove', growMeasure);
+    map.off('touchmove', growMeasure);
+}
+
+// Builds a geodesic circle around `center` with the given radius in km.
+function circlePolygon(center, radiusKm) {
+    const coords = [];
+    const latRadius = radiusKm / 110.574;
+    const lngRadius = radiusKm / (111.32 * Math.cos(center.lat * Math.PI / 180));
+
+    for (let i = 0; i <= MEASURE_CIRCLE_STEPS; i++) {
+        const theta = (i / MEASURE_CIRCLE_STEPS) * (2 * Math.PI);
+        coords.push([
+            center.lng + lngRadius * Math.cos(theta),
+            center.lat + latRadius * Math.sin(theta)
+        ]);
+    }
+
+    return coords;
+}
+
+// Clear measurement
+function clearMeasurement() {
+    measureCenter = null;
+    measureRadiusKm = 0;
+
+    map.off('mousemove', growMeasure);
+    map.off('touchmove', growMeasure);
+
+    if (measureMarker) {
+        measureMarker.remove();
+        measureMarker = null;
+    }
+
+    if (measureLabel) {
+        measureLabel.remove();
+        measureLabel = null;
+        measureLabelEl = null;
+    }
+
+    map.getSource(MEASURE_SOURCE)?.setData(emptyMeasureData());
 }
 
 // Calculate distance between two points (Haversine formula)
@@ -320,7 +451,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     const km = R * c;
     const miles = km * 0.621371;
-    
+
     return { km, miles };
 }
 

@@ -42,7 +42,7 @@ const units = {
 const NEXRAD_DEFAULT_SCALE_OFFSET = {
     N0B: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
     N0G: { scale: 2.0, offset: 128.0, unit: 'm/s' },
-    N0C: { scale: 1.0, offset: 0.0, unit: '%' },
+    N0C: { scale: 1.0, offset: 0.0, unit: '%' },  // Data is already in 0-1 range (0.45-1.0 for CC)
     N0K: { scale: 1.0, offset: 0.0, unit: 'dB' },
     TZ0: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
     TZ1: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
@@ -468,6 +468,8 @@ function renderPreloadedFrame(frameIndex) {
         console.warn('[Deluge] No preloaded frame found at index:', frameIndex);
         return false;
     }
+
+    window.currentRenderedFrameIndex = frameIndex;
     
     if (typeof window.NexradRenderer === 'undefined') {
         console.error('[Deluge] NexradRenderer is not loaded');
@@ -486,6 +488,34 @@ function renderPreloadedFrame(frameIndex) {
         console.error('[Deluge] Failed to render preloaded frame:', error);
         return false;
     }
+}
+
+// Rebuilds every preloaded frame's color lookup table with the colortable the
+// user currently has selected, then repaints whichever frame is on screen.
+async function refreshRadarColors() {
+    const frames = window.preloadedRadarFrames;
+    if (!frames || frames.size === 0) return;
+
+    const product = (window.currentSelectedProduct || 'N0B').toUpperCase();
+
+    for (const frame of frames.values()) {
+        if (!frame || !frame.parsed) continue;
+        const colorLut = await buildColorLut(product, frame.parsed.radial.is16Level);
+        frame.colorLut = colorLut;
+        frame.mesh = buildRadialMesh(
+            frame.parsed.radial,
+            frame.parsed.pdb.latitude,
+            frame.parsed.pdb.longitude,
+            colorLut
+        );
+    }
+
+    const indices = Array.from(frames.keys()).sort((a, b) => a - b);
+    const current = frames.has(window.currentRenderedFrameIndex)
+        ? window.currentRenderedFrameIndex
+        : indices[indices.length - 1];
+
+    renderPreloadedFrame(current);
 }
 
 async function fetchLevelIIIBuffer(key) {
@@ -942,13 +972,18 @@ const VELOCITY_STOPS = [
 ];
 
 const CORRELATION_COEFFICIENT_STOPS = [
-    [0, [0, 0, 0, 0]],
-    [50, [255, 0, 0, 255]],
-    [70, [255, 165, 0, 255]],
-    [80, [255, 255, 0, 255]],
-    [90, [0, 255, 0, 255]],
-    [95, [0, 128, 255, 255]],
-    [100, [0, 0, 255, 255]]
+    [0, [0, 0, 0, 0]],  // Below threshold
+    [45, [0, 0, 0, 255]],  // 0.45 - black
+    [49, [110, 110, 110, 255]],  // 0.49 - gray
+    [61, [170, 170, 170, 255]],  // 0.61 - light gray
+    [72, [10, 10, 190, 255]],  // 0.72 - dark blue
+    [83, [149, 149, 249, 255]],  // 0.83 - light blue
+    [87, [95, 245, 100, 255]],  // 0.87 - green
+    [92, [255, 255, 0, 255]],  // 0.92 - yellow
+    [93, [255, 140, 0, 255]],  // 0.93 - orange
+    [97, [225, 3, 0, 255]],  // 0.97 - red
+    [98, [139, 30, 77, 255]],  // 0.98 - dark red
+    [100, [152, 124, 93, 255]]  // 1.0 - brown
 ];
 
 const DIFFERENTIAL_REFLECTIVITY_STOPS = [
@@ -988,28 +1023,10 @@ function interpolateStops(stops, value) {
 // built-in ramp above instead of failing the whole render.
 async function loadProjectColorLut(product) {
     try {
-        // Map products to their colortable subdirectories
-        const productToSubdir = {
-            // Reflectivity products
-            'N0B': 'Reflectivity',
-            'TZ0': 'Reflectivity',
-            'TZ1': 'Reflectivity',
-            'TZ2': 'Reflectivity',
-            'TZL': 'Reflectivity',
-            // Velocity products
-            'N0G': 'Velocity',
-            'TV0': 'Velocity',
-            'TV1': 'Velocity',
-            'TV2': 'Velocity',
-            // Correlation Coefficient
-            'N0C': 'CC',
-            // Differential Reflectivity
-            'N0K': 'DF',
-            // Storm Accumulation
-            'DTA': 'DTA'
-        };
-
-        const subdir = productToSubdir[product] || 'Reflectivity';
+        // Map products (including tilt variants) to their colortable subdirectories
+        const subdir = typeof window.colortableSubdirFor === 'function'
+            ? window.colortableSubdirFor(product)
+            : 'Reflectivity';
         
         // Get color table for this specific product type
         let selectedTable = 'IEM';
@@ -1037,7 +1054,7 @@ async function loadProjectColorLut(product) {
         const extension = tableExtensions[selectedTable] || '.json';
         const filename = selectedTable + extension;
         
-        const response = await fetch(`https://jessewx2011.github.io/Deluge/json/colortables/${subdir}/${filename}`);
+        const response = await fetch(`json/colortables/${subdir}/${filename}`);
         if (!response.ok) return null;
         const text = await response.text();
 
@@ -1108,7 +1125,8 @@ function normalizeColor(color) {
 // Products whose values are velocity (kt), so they should use VELOCITY_STOPS
 // instead of the default REFLECTIVITY_STOPS.
 function isVelocityProduct(product) {
-    return ['N0G', 'TV0', 'TV1', 'TV2'].includes((product || '').toUpperCase());
+    return ['N0G', 'NAG', 'N1G', 'NBU', 'N2U', 'N3U', 'TV0', 'TV1', 'TV2']
+        .includes((product || '').toUpperCase());
 }
 
 // Products whose values are correlation coefficient (percentage)
@@ -1410,6 +1428,7 @@ window.latestLevelIII = latestLevelIII;
 window.tryRenderNexradWebGL = tryRenderNexradWebGL;
 window.preloadRadarFrames = preloadRadarFrames;
 window.renderPreloadedFrame = renderPreloadedFrame;
+window.refreshRadarColors = refreshRadarColors;
 window.parseTimestampFromKey = parseTimestampFromKey;
 window.formatTickTime = formatTickTime;
 window.startRadarAutoRefresh = startRadarAutoRefresh;

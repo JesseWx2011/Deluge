@@ -36,6 +36,9 @@ window.colorTables = {
     dta: 'Default'
 };
 
+const REFLECTIVITY_PRODUCTS = ['N0B', 'NAB', 'N1B', 'NBB', 'N2B', 'N3B', 'TZ0', 'TZ1', 'TZ2', 'TZL'];
+const VELOCITY_PRODUCTS = ['N0G', 'NAG', 'N1G', 'NBU', 'N2U', 'N3U', 'TV0', 'TV1', 'TV2'];
+
 // Product-specific value ranges for colorbar ticks
 const productValueRanges = {
     'N0B': { min: -20, max: 90, unit: 'dBZ' },
@@ -96,6 +99,17 @@ const tiltConfigs = {
     ]
 };
 
+// Colortable files live in json/colortables/<subdir>/
+function colortableSubdirFor(product) {
+    if (VELOCITY_PRODUCTS.includes(product)) return 'Velocity';
+    if (product === 'N0C') return 'CC';
+    if (product === 'N0K') return 'DF';
+    if (product === 'DTA') return 'DTA';
+    return 'Reflectivity';
+}
+
+window.colortableSubdirFor = colortableSubdirFor;
+
 // Update colorbar based on selected product
 async function updateColorbar(productId) {
     const colortable = document.getElementById('colortable');
@@ -110,18 +124,7 @@ async function updateColorbar(productId) {
     let gradient = colorTableGradients.default;
     
     try {
-        // Map products to their colortable subdirectories
-        const productToSubdir = {
-            'N0B': 'Reflectivity', 'NAB': 'Reflectivity', 'N1B': 'Reflectivity', 'NBB': 'Reflectivity', 'N2B': 'Reflectivity', 'N3B': 'Reflectivity',
-            'TZ0': 'Reflectivity', 'TZ1': 'Reflectivity', 'TZ2': 'Reflectivity', 'TZL': 'Reflectivity',
-            'N0G': 'Velocity', 'NAG': 'Velocity', 'N1G': 'Velocity', 'NBU': 'Velocity', 'N2U': 'Velocity', 'N3U': 'Velocity',
-            'TV0': 'Velocity', 'TV1': 'Velocity', 'TV2': 'Velocity',
-            'N0C': 'CC',
-            'N0K': 'DF',
-            'DTA': 'DTA'
-        };
-        
-        const subdir = productToSubdir[productId] || 'Reflectivity';
+        const subdir = colortableSubdirFor(productId);
         
         // Get color table for this specific product type
         let selectedTable = 'IEM';
@@ -150,7 +153,7 @@ async function updateColorbar(productId) {
         if (window.colorTableGradientCache && window.colorTableGradientCache[cacheKey]) {
             gradient = window.colorTableGradientCache[cacheKey];
         } else {
-            const response = await fetch(`../json/colortables/${subdir}/${filename}`);
+            const response = await fetch(`json/colortables/${subdir}/${filename}`);
             if (response.ok) {
                 const text = await response.text();
                 let stops = [];
@@ -506,70 +509,51 @@ function getColorTableForProduct(product) {
 }
 
 function getProductType(product) {
-    // Map products to their type categories
-    if (['N0B', 'TZ0', 'TZ1', 'TZ2', 'TZL'].includes(product)) return 'reflectivity';
-    if (['N0G', 'TV0', 'TV1', 'TV2'].includes(product)) return 'velocity';
+    // Map products (including every tilt variant) to their type categories
+    if (REFLECTIVITY_PRODUCTS.includes(product)) return 'reflectivity';
+    if (VELOCITY_PRODUCTS.includes(product)) return 'velocity';
     if (product === 'N0C') return 'cc';
     if (product === 'N0K') return 'df';
     if (product === 'DTA') return 'dta';
     return 'reflectivity'; // Default
 }
 
-if (colorTableReflectivity) {
-    colorTableReflectivity.addEventListener("change", (event) => {
-        window.colorTables.reflectivity = event.target.value;
-        window.selectedColorTable = event.target.value; // For backward compatibility
-        saveSettings();
-        // Reload radar with new color table if a radar site is selected
-        if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {
-            loadRadarFrame('0');
-        }
-    });
+// Repaints the colorbar and, when the changed table applies to the product on
+// screen, the radar imagery itself — without waiting for a new scan.
+async function applyColorTableChange(productType) {
+    window.colorTableGradientCache = {};
+
+    const activeProduct = window.currentSelectedProduct || 'N0B';
+
+    if (getProductType(activeProduct) !== productType) return;
+
+    await updateColorbar(activeProduct);
+
+    if (typeof window.refreshRadarColors === "function") {
+        await window.refreshRadarColors();
+    }
 }
 
-if (colorTableVelocity) {
-    colorTableVelocity.addEventListener("change", (event) => {
-        window.colorTables.velocity = event.target.value;
-        saveSettings();
-        // Reload radar with new color table if a radar site is selected
-        if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {
-            loadRadarFrame('0');
-        }
-    });
-}
+const colorTableSelects = {
+    reflectivity: colorTableReflectivity,
+    velocity: colorTableVelocity,
+    cc: colorTableCC,
+    df: colorTableDF,
+    dta: colorTableDTA
+};
 
-if (colorTableCC) {
-    colorTableCC.addEventListener("change", (event) => {
-        window.colorTables.cc = event.target.value;
-        saveSettings();
-        // Reload radar with new color table if a radar site is selected
-        if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {
-            loadRadarFrame('0');
-        }
-    });
-}
+Object.entries(colorTableSelects).forEach(([productType, select]) => {
+    if (!select) return;
 
-if (colorTableDF) {
-    colorTableDF.addEventListener("change", (event) => {
-        window.colorTables.df = event.target.value;
-        saveSettings();
-        // Reload radar with new color table if a radar site is selected
-        if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {
-            loadRadarFrame('0');
+    select.addEventListener("change", (event) => {
+        window.colorTables[productType] = event.target.value;
+        if (productType === 'reflectivity') {
+            window.selectedColorTable = event.target.value; // For backward compatibility
         }
-    });
-}
-
-if (colorTableDTA) {
-    colorTableDTA.addEventListener("change", (event) => {
-        window.colorTables.dta = event.target.value;
         saveSettings();
-        // Reload radar with new color table if a radar site is selected
-        if (typeof currentTrimmedId !== "undefined" && currentTrimmedId && typeof loadRadarFrame === "function") {
-            loadRadarFrame('0');
-        }
+        applyColorTableChange(productType);
     });
-}
+});
 
 // ----- Outlook Border Thickness / Opacity -----
 function applyOutlookBorderWidth(px) {

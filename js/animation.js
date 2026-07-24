@@ -159,6 +159,19 @@ function updateLoadingProgress(loaded, total) {
     }
 }
 
+// Playback can't run without frames, so keep the control in step with them.
+function disablePlayback() {
+    if (typeof window.stopRadarPlayback === 'function') window.stopRadarPlayback();
+
+    const playButton = document.getElementById('playbackToggle');
+    if (playButton) playButton.disabled = true;
+
+    const frameLabel = document.getElementById('playbackFrameLabel');
+    if (frameLabel) frameLabel.textContent = '--';
+}
+
+window.disableRadarPlayback = disablePlayback;
+
 // Update timeline ticks based on preloaded frames
 function updateTimelineTicks() {
     if (!timelineTicks) return;
@@ -171,6 +184,7 @@ function updateTimelineTicks() {
             timelineSlider.max = 0;
             timelineSlider.value = 0;
         }
+        disablePlayback();
         return;
     }
     
@@ -184,6 +198,7 @@ function updateTimelineTicks() {
             timelineSlider.max = 0;
             timelineSlider.value = 0;
         }
+        disablePlayback();
         return;
     }
     
@@ -192,6 +207,12 @@ function updateTimelineTicks() {
         timelineSlider.max = frameCount - 1;
         timelineSlider.value = frameCount - 1; // Default to latest
     }
+
+    const frameLabel = document.getElementById('playbackFrameLabel');
+    if (frameLabel) frameLabel.textContent = `Frame ${frameCount} / ${frameCount}`;
+
+    const playButton = document.getElementById('playbackToggle');
+    if (playButton) playButton.disabled = frameCount < 2;
     
     // Always clear and rebuild ticks to ensure correct data for current radar site
     timelineTicks.innerHTML = '';
@@ -315,3 +336,158 @@ if (timelineSlider) {
 }
 
 window.updateTimelineTicks = updateTimelineTicks;
+
+/* ----------------------- Radar Playback ----------------------- */
+
+const playbackToggle = document.getElementById('playbackToggle');
+const playbackIcon = document.getElementById('playbackIcon');
+const playbackSpeed = document.getElementById('playbackSpeed');
+const playbackFrameLabel = document.getElementById('playbackFrameLabel');
+
+// Pause on the newest frame so the loop reads like a radar loop instead of
+// snapping straight back to the oldest scan.
+const PLAYBACK_END_PAUSE_MS = 900;
+
+let playbackTimer = null;
+let isPlaying = false;
+
+function loadedFrameIndices() {
+    if (!window.preloadedRadarFrames) return [];
+    return Array.from(window.preloadedRadarFrames.keys()).sort((a, b) => a - b);
+}
+
+function playbackFrameDelay() {
+    return playbackSpeed ? Number(playbackSpeed.value) : 400;
+}
+
+function showPlaybackFrame(sliderIndex) {
+    const indices = loadedFrameIndices();
+    const frameIndex = indices[sliderIndex];
+    const frame = window.preloadedRadarFrames.get(frameIndex);
+    if (!frame || !frame.loaded) return false;
+
+    if (timelineSlider) timelineSlider.value = sliderIndex;
+
+    if (timelineLabel) {
+        if (sliderIndex === indices.length - 1) {
+            timelineLabel.textContent = 'Now';
+        } else if (frame.timestamp) {
+            const hh = String(frame.timestamp.getUTCHours()).padStart(2, '0');
+            const mm = String(frame.timestamp.getUTCMinutes()).padStart(2, '0');
+            timelineLabel.textContent = `${hh}:${mm}`;
+        }
+    }
+
+    if (playbackFrameLabel) {
+        playbackFrameLabel.textContent = `Frame ${sliderIndex + 1} / ${indices.length}`;
+    }
+
+    if (typeof window.renderPreloadedFrame === 'function') {
+        window.renderPreloadedFrame(frameIndex);
+    }
+
+    return true;
+}
+
+function scheduleNextPlaybackFrame(delay) {
+    clearTimeout(playbackTimer);
+    playbackTimer = setTimeout(advancePlayback, delay);
+}
+
+function advancePlayback() {
+    if (!isPlaying) return;
+
+    const indices = loadedFrameIndices();
+    if (indices.length < 2) {
+        stopPlayback();
+        return;
+    }
+
+    const currentIndex = timelineSlider ? Number(timelineSlider.value) : 0;
+    const nextIndex = currentIndex >= indices.length - 1 ? 0 : currentIndex + 1;
+
+    showPlaybackFrame(nextIndex);
+
+    const atNewestFrame = nextIndex === indices.length - 1;
+    scheduleNextPlaybackFrame(atNewestFrame ? PLAYBACK_END_PAUSE_MS : playbackFrameDelay());
+}
+
+function startPlayback() {
+    const indices = loadedFrameIndices();
+    if (indices.length < 2) return;
+
+    isPlaying = true;
+    if (playbackIcon) playbackIcon.className = 'fa-solid fa-pause';
+    if (playbackToggle) {
+        playbackToggle.classList.add('playing');
+        playbackToggle.title = 'Pause radar loop';
+        playbackToggle.setAttribute('aria-label', 'Pause radar loop');
+    }
+
+    // A loop started from the newest frame should restart at the oldest one.
+    const currentIndex = timelineSlider ? Number(timelineSlider.value) : 0;
+    if (currentIndex >= indices.length - 1) showPlaybackFrame(0);
+
+    scheduleNextPlaybackFrame(playbackFrameDelay());
+}
+
+function stopPlayback() {
+    isPlaying = false;
+    clearTimeout(playbackTimer);
+    playbackTimer = null;
+
+    if (playbackIcon) playbackIcon.className = 'fa-solid fa-play';
+    if (playbackToggle) {
+        playbackToggle.classList.remove('playing');
+        playbackToggle.title = 'Play radar loop';
+        playbackToggle.setAttribute('aria-label', 'Play radar loop');
+    }
+}
+
+function togglePlayback() {
+    if (isPlaying) {
+        stopPlayback();
+    } else {
+        startPlayback();
+    }
+}
+
+if (playbackToggle) {
+    playbackToggle.addEventListener('click', (event) => {
+        event.stopPropagation();
+        togglePlayback();
+    });
+}
+
+if (playbackSpeed) {
+    playbackSpeed.addEventListener('change', (event) => {
+        event.stopPropagation();
+        if (isPlaying) scheduleNextPlaybackFrame(playbackFrameDelay());
+    });
+
+    playbackSpeed.addEventListener('click', (event) => event.stopPropagation());
+}
+
+// Scrubbing by hand takes over from the loop.
+if (timelineSlider) {
+    timelineSlider.addEventListener('input', () => {
+        if (isPlaying) stopPlayback();
+        const indices = loadedFrameIndices();
+        if (playbackFrameLabel && indices.length) {
+            playbackFrameLabel.textContent = `Frame ${Number(timelineSlider.value) + 1} / ${indices.length}`;
+        }
+    });
+}
+
+// Spacebar toggles the loop, as long as the user isn't typing somewhere.
+document.addEventListener('keydown', (event) => {
+    if (event.code !== 'Space') return;
+    const tag = (event.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+    event.preventDefault();
+    togglePlayback();
+});
+
+window.stopRadarPlayback = stopPlayback;
+window.toggleRadarPlayback = togglePlayback;

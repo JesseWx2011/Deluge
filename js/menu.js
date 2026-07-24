@@ -11,18 +11,34 @@ let alertsVisible = true;
 let stormTracksVisible = true;
 let lightningVisible = true;
 
+const MODAL_CLOSE_ANIMATION_MS = 220;
+
 function openSettingsModal() {
-    if (settingsModalContainer) {
-        settingsModalContainer.style.display = "flex";
-    }
+    if (!settingsModalContainer) return;
+
+    settingsModalContainer.style.display = "flex";
+    settingsModalContainer.classList.add("isOpening");
+    setTimeout(() => settingsModalContainer.classList.remove("isOpening"), MODAL_CLOSE_ANIMATION_MS + 30);
 }
 
 function closeSettingsModal() {
-    if (settingsModalContainer) {
+    if (!settingsModalContainer) return;
+
+    settingsModalContainer.classList.add("isClosing");
+    setTimeout(() => {
+        settingsModalContainer.classList.remove("isClosing");
         settingsModalContainer.style.display = "none";
-    }
+    }, MODAL_CLOSE_ANIMATION_MS);
 }
 
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (settingsModalContainer && settingsModalContainer.style.display === "flex") {
+        closeSettingsModal();
+    }
+});
+
+window.openSettingsModal = openSettingsModal;
 window.closeSettingsModal = closeSettingsModal;
 
 function toggleLayersDropdown() {
