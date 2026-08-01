@@ -1018,7 +1018,7 @@ async function loadProjectColorLut(product) {
         const extension = tableExtensions[selectedTable] || '.json';
         const filename = selectedTable + extension;
         
-        const response = await fetch(`../json/colortables/${subdir}/${filename}`);
+        const response = await fetch(`https://jessewx2011.github.io/Deluge/json/colortables/${subdir}/${filename}`);
         if (!response.ok) return null;
         const text = await response.text();
 
