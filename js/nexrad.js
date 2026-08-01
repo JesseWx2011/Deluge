@@ -33,7 +33,11 @@ const FRAME_COUNT = 25;
 const units = {
     153: 'DBz', // Reflectivity
     154: 'm/s', // Velocity
+    159: 'dB',
     161: "%", // Correlation Coeffecient
+    180: 'dBZ', // TDWR Reflectivity
+    182: 'm/s', // TDWR Velocity
+    186: 'dBZ', // TDWR Long-Range Reflectivity
 }
 
 // Default byte-value -> physical-unit conversion per product, used when we
@@ -42,8 +46,8 @@ const units = {
 const NEXRAD_DEFAULT_SCALE_OFFSET = {
     N0B: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
     N0G: { scale: 2.0, offset: 128.0, unit: 'm/s' },
-    N0C: { scale: 1.0, offset: 0.0, unit: '%' },
-    N0K: { scale: 1.0, offset: 0.0, unit: 'dB' },
+    N0C: { scale: 245, offset: 0.0, unit: '%' },
+    N0K: { scale: 245, offset: 0.0, unit: 'dB' },
     TZ0: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
     TZ1: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
     TZ2: { scale: 2.0, offset: 66.0, unit: 'dBZ' },
@@ -143,30 +147,28 @@ async function fetchLevelIIIListing(radSite, productCode, dateObj) {
 
     const prefix = `?prefix=${radSite}_${productCode}_${year}_${month}_${day}`;
     const url = awsLevelIIIBucket + prefix;
-    console.log('[Deluge] Fetching Level III listing:', url);
-    
+
     const response = await fetch(url);
-    console.log('[Deluge] Response status:', response.status, response.statusText);
-    
     if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
     }
 
     const xmlText = await response.text();
-    console.log('[Deluge] XML response length:', xmlText.length);
-    console.log('[Deluge] XML response preview:', xmlText.substring(0, 500));
-    
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlText, "application/xml");
     const keyElements = xmlDoc.getElementsByTagName("Key");
-    console.log('[Deluge] Found Key elements:', keyElements.length);
-    
-    const keys = Array.from(keyElements)
+
+    return Array.from(keyElements)
         .map((node) => node.textContent?.trim())
         .filter(Boolean);
-    console.log('[Deluge] Parsed keys:', keys);
-    return keys;
 }
+
+// Concurrent calls for the same radar+product (e.g. tryRenderNexradWebGL and
+// preloadRadarFrames both firing when a site is selected) share one in-flight
+// listing fetch instead of independently hitting the S3 bucket twice. The
+// cache entry is cleared once the fetch settles, so the *next* site switch
+// or refresh cycle always gets a fresh listing.
+const levelIIIListingInFlight = new Map();
 
 async function latestLevelIII(radarStation, product) {
     // Fetch from the Level III AWS Bucket. Today's and yesterday's (UTC)
@@ -177,41 +179,40 @@ async function latestLevelIII(radarStation, product) {
     // landed a few minutes before the UTC day rolled over.
     const radSite = (radarStation || window.currentRadarId || '').slice(1, 4).toUpperCase();
     const productCode = (product || 'N0B').toUpperCase();
+    const cacheKey = `${radSite}_${productCode}`;
 
-    console.log('[Deluge] latestLevelIII called with radarStation:', radarStation, 'product:', product);
-    console.log('[Deluge] Extracted radSite:', radSite, 'productCode:', productCode);
+    const inFlight = levelIIIListingInFlight.get(cacheKey);
+    if (inFlight) return inFlight;
 
-    try {
-        const today = new Date();
-        const yesterday = new Date(today);
-        yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const promise = (async () => {
+        try {
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
-        console.log('[Deluge] Fetching for today:', today.toISOString(), 'and yesterday:', yesterday.toISOString());
+            const [todayKeys, yesterdayKeys] = await Promise.all([
+                fetchLevelIIIListing(radSite, productCode, today).catch((err) => {
+                    console.error('[Deluge] Today fetch failed:', err);
+                    return [];
+                }),
+                fetchLevelIIIListing(radSite, productCode, yesterday).catch((err) => {
+                    console.error('[Deluge] Yesterday fetch failed:', err);
+                    return [];
+                })
+            ]);
 
-        const [todayKeys, yesterdayKeys] = await Promise.all([
-            fetchLevelIIIListing(radSite, productCode, today).catch((err) => {
-                console.error('[Deluge] Today fetch failed:', err);
-                return [];
-            }),
-            fetchLevelIIIListing(radSite, productCode, yesterday).catch((err) => {
-                console.error('[Deluge] Yesterday fetch failed:', err);
-                return [];
-            })
-        ]);
+            const keys = [...yesterdayKeys, ...todayKeys].sort();
+            return keys.slice(`-${FRAME_COUNT}`);
+        } catch (error) {
+            console.error('[Deluge] Failed to parse Level III listing:', error);
+            return [];
+        } finally {
+            levelIIIListingInFlight.delete(cacheKey);
+        }
+    })();
 
-        console.log('[Deluge] Today keys:', todayKeys.length, 'Yesterday keys:', yesterdayKeys.length);
-        console.log('[Deluge] Today keys array:', todayKeys);
-        console.log('[Deluge] Yesterday keys array:', yesterdayKeys);
-
-        const keys = [...yesterdayKeys, ...todayKeys].sort();
-        const recentKeys = keys.slice(`-${FRAME_COUNT}`);
-        console.log('[Deluge] Latest Level III keys:', recentKeys);
-
-        return recentKeys;
-    } catch (error) {
-        console.error('[Deluge] Failed to parse Level III listing:', error);
-        return [];
-    }
+    levelIIIListingInFlight.set(cacheKey, promise);
+    return promise;
 }
 
 // Parse timestamp from Level III key format: RADAR_PRODUCT_YYYY_MM_DD_HH_MM_SS
@@ -243,6 +244,26 @@ window.preloadedRadarFrames = new Map();
 let radarRefreshInterval = null;
 const RADAR_REFRESH_MS = 120000; // Check for new frames every 2 minutes (reduced from 60s for performance)
 
+// Cache for radar frame buffers to avoid duplicate fetches
+const radarFrameBufferCache = new Map();
+const MAX_CACHE_SIZE = 50; // Limit cache size to prevent memory issues
+
+// Cache for fully parsed + mesh-built frames, keyed by `${key}_${product}`.
+// Decompression and mesh construction are the expensive parts of loading a
+// frame (not the network fetch), so this avoids redoing that work when the
+// same frame is rendered again (e.g. re-selecting a site/product you already
+// viewed, or the timeline scrubbing back over frames already preloaded).
+const parsedFrameCache = new Map();
+const MAX_PARSED_FRAME_CACHE_SIZE = 30;
+
+function cacheParsedFrame(cacheKey, frame) {
+    if (parsedFrameCache.size >= MAX_PARSED_FRAME_CACHE_SIZE) {
+        const firstKey = parsedFrameCache.keys().next().value;
+        parsedFrameCache.delete(firstKey);
+    }
+    parsedFrameCache.set(cacheKey, frame);
+}
+
 // Start auto-refreshing radar frames
 function startRadarAutoRefresh(radarStation, product) {
     // Clear any existing interval
@@ -252,7 +273,6 @@ function startRadarAutoRefresh(radarStation, product) {
     
     // Set up new interval
     radarRefreshInterval = setInterval(async () => {
-        console.log('[Deluge] Auto-refreshing radar frames...');
         try {
             const productCode = (product || window.currentSelectedProduct || 'N0B').toUpperCase();
             await preloadRadarFrames(radarStation, productCode);
@@ -261,14 +281,10 @@ function startRadarAutoRefresh(radarStation, product) {
             if (typeof window.updateTimelineTicks === 'function') {
                 window.updateTimelineTicks();
             }
-            
-            console.log('[Deluge] Radar frames auto-refreshed');
         } catch (error) {
             console.error('[Deluge] Failed to auto-refresh radar frames:', error);
         }
     }, RADAR_REFRESH_MS);
-    
-    console.log('[Deluge] Started radar auto-refresh (interval:', RADAR_REFRESH_MS, 'ms)');
 }
 
 // Stop auto-refreshing radar frames
@@ -276,189 +292,135 @@ function stopRadarAutoRefresh() {
     if (radarRefreshInterval) {
         clearInterval(radarRefreshInterval);
         radarRefreshInterval = null;
-        console.log('[Deluge] Stopped radar auto-refresh');
     }
 }
 
-// Preload the last 5 radar frames for a given radar site and product
+// Preload the last N radar frames for a given radar site and product. The
+// most recent frame is fetched and rendered-ready first (for fast first
+// paint), then the rest load in the background at higher concurrency.
 async function preloadRadarFrames(radarStation, product) {
     const productCode = (product || 'N0B').toUpperCase();
-    
-    // Clear previous preloaded frames
+
     window.preloadedRadarFrames.clear();
-    
+
     try {
-        // Pass the full radarStation to latestLevelIII, not the extracted radSite
         const keys = await latestLevelIII(radarStation, productCode);
-        console.log('[Deluge] Received keys from latestLevelIII:', keys);
-        console.log('[Deluge] Keys type:', typeof keys);
-        console.log('[Deluge] Keys length:', keys ? keys.length : 'null/undefined');
-        
+
         if (!keys || keys.length === 0) {
             console.warn('[Deluge] No keys found for preloading');
             return [];
         }
-        
-        // Limit the number of frames to preload for better performance
+
         const maxFramesToPreload = 10;
         const keysToLoad = keys.slice(-maxFramesToPreload);
         const totalFrames = keysToLoad.length;
-        console.log('[Deluge] Preloading up to', totalFrames, 'radar frames (limited from', keys.length, 'total)');
-        console.log('[Deluge] Keys to fetch:', keysToLoad);
-        
-        // Initialize progress bar
+
         if (typeof window.updateLoadingProgress === 'function') {
             window.updateLoadingProgress(0, totalFrames);
         }
-        
-        // Update timeline label to show loading progress
+
         const timelineLabel = document.getElementById('timelineLabel');
-        if (timelineLabel) {
-            timelineLabel.textContent = `Frames Loading (0/${totalFrames})`;
-        }
-        
-        // Fetch the most recent frame first (last key) for immediate display
+        if (timelineLabel) timelineLabel.textContent = `Frames Loading (0/${totalFrames})`;
+
         const latestKey = keysToLoad[keysToLoad.length - 1];
-        console.log('[Deluge] Fetching latest frame first:', latestKey);
-        
+
         try {
-            const latestBuffer = await fetchLevelIIIBuffer(latestKey);
-            const latestParsed = await parseLevelIIIBuffer(latestBuffer, productCode);
-            const latestTimestamp = parseTimestampFromKey(latestKey);
-            const latestColorLut = await buildColorLut(productCode, latestParsed.radial.is16Level);
-            
-            const latestFrame = {
-                key: latestKey,
-                timestamp: latestTimestamp,
-                parsed: latestParsed,
-                colorLut: latestColorLut,
-                mesh: buildRadialMesh(latestParsed.radial, latestParsed.pdb.latitude, latestParsed.pdb.longitude, latestColorLut),
-                loaded: true
-            };
-            
-            // Store the latest frame immediately at the last index
+            const latestFrame = await loadSingleFrame(latestKey, productCode);
+
             window.preloadedRadarFrames.set(keys.length - 1, latestFrame);
-            console.log('[Deluge] Latest frame loaded and stored');
-            
-            // Update progress
+
             if (typeof window.updateLoadingProgress === 'function') {
                 window.updateLoadingProgress(1, totalFrames);
             }
-            if (timelineLabel) {
-                timelineLabel.textContent = `Frames Loading (1/${totalFrames})`;
-            }
-            
-            // Fetch remaining frames in the background
+            if (timelineLabel) timelineLabel.textContent = `Frames Loading (1/${totalFrames})`;
+
+            // Load the rest concurrently in the background — these are
+            // independent network + CPU work, so there's no benefit to
+            // throttling batch size or inserting artificial delays between
+            // batches; the event loop already yields naturally at each await.
             const remainingKeys = keysToLoad.slice(0, -1);
             let loadedCount = 1;
-            
-            // Load frames in smaller batches to reduce memory pressure
-            const batchSize = 3;
-            for (let i = 0; i < remainingKeys.length; i += batchSize) {
-                const batch = remainingKeys.slice(i, i + batchSize);
-                const batchPromises = batch.map(async (key) => {
+
+            const backgroundBatchSize = 6;
+            for (let i = 0; i < remainingKeys.length; i += backgroundBatchSize) {
+                const batch = remainingKeys.slice(i, i + backgroundBatchSize);
+                const results = await Promise.all(batch.map(async (key) => {
                     try {
-                        console.log('[Deluge] Fetching background frame:', key);
-                        const buffer = await fetchLevelIIIBuffer(key);
-                        const parsed = await parseLevelIIIBuffer(buffer, productCode);
-                        const timestamp = parseTimestampFromKey(key);
-                        const colorLut = await buildColorLut(productCode, parsed.radial.is16Level);
-                        
-                        const frame = {
-                            key,
-                            timestamp,
-                            parsed,
-                            colorLut,
-                            mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut),
-                            loaded: true
-                        };
-                        
-                        return { frame, key, success: true };
+                        return { frame: await loadSingleFrame(key, productCode), key, success: true };
                     } catch (error) {
                         console.error('[Deluge] Failed to preload frame:', key, error);
                         return { key, success: false };
                     }
-                });
-                
-                const results = await Promise.all(batchPromises);
-                
+                }));
+
                 for (const result of results) {
                     if (result.success) {
-                        // Find the original index in the full keys array
                         const originalIndex = keys.indexOf(result.key);
-                        if (originalIndex !== -1) {
-                            window.preloadedRadarFrames.set(originalIndex, result.frame);
-                        }
+                        if (originalIndex !== -1) window.preloadedRadarFrames.set(originalIndex, result.frame);
                         loadedCount++;
                     }
                 }
-                
-                // Update progress
+
                 if (typeof window.updateLoadingProgress === 'function') {
                     window.updateLoadingProgress(loadedCount, totalFrames);
                 }
-                if (timelineLabel) {
-                    timelineLabel.textContent = `Frames Loading (${loadedCount}/${totalFrames})`;
-                }
-                
-                // Small delay between batches to allow UI to update
-                await new Promise(resolve => setTimeout(resolve, 10));
+                if (timelineLabel) timelineLabel.textContent = `Frames Loading (${loadedCount}/${totalFrames})`;
             }
-            
-            console.log('[Deluge] Successfully preloaded', loadedCount, 'radar frames');
-            
-            // Reset timeline label to "Latest" when loading is complete
-            if (timelineLabel) {
-                timelineLabel.textContent = 'Latest';
-            }
+
+            if (timelineLabel) timelineLabel.textContent = 'Latest';
             if (typeof window.updateLoadingProgress === 'function') {
                 window.updateLoadingProgress(totalFrames, totalFrames);
             }
-            
+
             return Array.from(window.preloadedRadarFrames.values());
-            
+
         } catch (error) {
-            console.error('[Deluge] Failed to load latest frame:', error);
-            // Fallback: load limited frames in parallel if latest frame fails
-            const framePromises = keysToLoad.map(async (key) => {
-                try {
-                    console.log('[Deluge] Fallback fetching key:', key);
-                    const buffer = await fetchLevelIIIBuffer(key);
-                    const parsed = await parseLevelIIIBuffer(buffer, productCode);
-                    const timestamp = parseTimestampFromKey(key);
-                    const colorLut = await buildColorLut(productCode, parsed.radial.is16Level);
-                    
-                    return {
-                        key,
-                        timestamp,
-                        parsed,
-                        colorLut,
-                        mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut),
-                        loaded: true
-                    };
-                } catch (error) {
-                    console.error('[Deluge] Failed to preload frame:', key, error);
+            console.error('[Deluge] Failed to load latest frame, falling back to parallel load:', error);
+
+            const frames = await Promise.all(keysToLoad.map((key) =>
+                loadSingleFrame(key, productCode).catch((err) => {
+                    console.error('[Deluge] Failed to preload frame:', key, err);
                     return null;
-                }
-            });
-            
-            const frames = await Promise.all(framePromises);
-            const validFrames = frames.filter(f => f !== null);
-            
+                })
+            ));
+
+            const validFrames = frames.filter(Boolean);
             validFrames.forEach((frame) => {
                 const originalIndex = keys.indexOf(frame.key);
-                if (originalIndex !== -1) {
-                    window.preloadedRadarFrames.set(originalIndex, frame);
-                }
+                if (originalIndex !== -1) window.preloadedRadarFrames.set(originalIndex, frame);
             });
-            
-            console.log('[Deluge] Fallback: Successfully preloaded', validFrames.length, 'radar frames');
+
             return validFrames;
         }
     } catch (error) {
         console.error('[Deluge] Failed to preload radar frames:', error);
         return [];
     }
+}
+
+// Fetches, parses, and builds the render-ready mesh for a single Level III
+// key. Shared by both the fast-path (latest frame) and background loading.
+async function loadSingleFrame(key, productCode) {
+    const cacheKey = `${key}_${productCode}`;
+    const cached = parsedFrameCache.get(cacheKey);
+    if (cached) return cached;
+
+    const buffer = await fetchLevelIIIBuffer(key);
+    const parsed = await parseLevelIIIBuffer(buffer, productCode);
+    const timestamp = parseTimestampFromKey(key);
+    const colorLut = await buildColorLut(productCode, parsed.radial.is16Level);
+
+    const frame = {
+        key,
+        timestamp,
+        parsed,
+        colorLut,
+        mesh: buildRadialMesh(parsed.radial, parsed.pdb.latitude, parsed.pdb.longitude, colorLut),
+        loaded: true
+    };
+
+    cacheParsedFrame(cacheKey, frame);
+    return frame;
 }
 
 // Render a preloaded frame by index (0 = oldest, 4 = newest)
@@ -476,11 +438,9 @@ function renderPreloadedFrame(frameIndex) {
     
     try {
         window.NexradRenderer.render(frame.mesh);
-        
-        const scanDate = nexradEpochToDate(frame.parsed.pdb.volumeScanDate, frame.parsed.pdb.volumeScanStartTime);
-        const scanTimeEl = document.getElementById('scanTime');
-        if (scanTimeEl) scanTimeEl.textContent = formatScanTimeUTC(scanDate) || '';
-        
+
+        setScanTime(nexradEpochToDate(frame.parsed.pdb.volumeScanDate, frame.parsed.pdb.volumeScanStartTime));
+
         return true;
     } catch (error) {
         console.error('[Deluge] Failed to render preloaded frame:', error);
@@ -489,12 +449,27 @@ function renderPreloadedFrame(frameIndex) {
 }
 
 async function fetchLevelIIIBuffer(key) {
+    // Check cache first
+    if (radarFrameBufferCache.has(key)) {
+        return radarFrameBufferCache.get(key);
+    }
+    
     const latestFileUrl = `${awsLevelIIIBucket}${key}`;
     const response = await fetch(latestFileUrl);
     if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
     }
-    return response.arrayBuffer();
+    const buffer = await response.arrayBuffer();
+    
+    // Cache the buffer
+    if (radarFrameBufferCache.size >= MAX_CACHE_SIZE) {
+        // Remove oldest entry (first in Map)
+        const firstKey = radarFrameBufferCache.keys().next().value;
+        radarFrameBufferCache.delete(firstKey);
+    }
+    radarFrameBufferCache.set(key, buffer);
+    
+    return buffer;
 }
 
 // ---------------------------------------------------------------------------
@@ -675,6 +650,7 @@ function parseDigitalRadialPacket(reader, product) {
         }
 
         const data = reader.bytes(numBytes).slice(); // copy out of the shared buffer
+        
         if (numBytes % 2 === 1) reader.skip(1); // halfword alignment padding
 
         radials.push({ startAngle, angleDelta, data });
@@ -857,28 +833,26 @@ function formatScanTimeUTC(date) {
     return `${mon} ${date.getDate()}, ${hh}:${mm}:${ss}`;
 }
 
+// Single source of truth for the current scan time: updates the #scanTime
+// text and stores the raw Date on window.currentScanDate so banner.js can
+// use it directly for its clock instead of re-parsing display text.
+function setScanTime(date) {
+    window.currentScanDate = date || null;
+    const scanTimeEl = document.getElementById('scanTime');
+    if (scanTimeEl) scanTimeEl.textContent = date ? (formatScanTimeUTC(date) || '') : '';
+    if (typeof window.refreshProductBanner === 'function') window.refreshProductBanner();
+}
+
 // ---------------------------------------------------------------------------
 // Geometry: polar (range/azimuth from the radar) -> lon/lat -> Mercator
+//
+// The spherical destination-point + Web Mercator projection math used to
+// place each mesh vertex is inlined directly in buildRadialMesh() below,
+// with per-row/per-column trig precomputed once instead of recomputed per
+// vertex — see the comments there for why.
 // ---------------------------------------------------------------------------
 
 const EARTH_RADIUS_KM = 6371.0088;
-
-function destinationPoint(lat0, lon0, bearingDeg, distanceKm) {
-    const bearing = (bearingDeg * Math.PI) / 180;
-    const lat1 = (lat0 * Math.PI) / 180;
-    const lon1 = (lon0 * Math.PI) / 180;
-    const angDist = distanceKm / EARTH_RADIUS_KM;
-
-    const lat2 = Math.asin(
-        Math.sin(lat1) * Math.cos(angDist) + Math.cos(lat1) * Math.sin(angDist) * Math.cos(bearing)
-    );
-    const lon2 = lon1 + Math.atan2(
-        Math.sin(bearing) * Math.sin(angDist) * Math.cos(lat1),
-        Math.cos(angDist) - Math.sin(lat1) * Math.sin(lat2)
-    );
-
-    return [(lon2 * 180) / Math.PI, (lat2 * 180) / Math.PI];
-}
 
 // ---------------------------------------------------------------------------
 // Color ramps
@@ -942,13 +916,19 @@ const VELOCITY_STOPS = [
 ];
 
 const CORRELATION_COEFFICIENT_STOPS = [
-    [0, [0, 0, 0, 0]],
-    [50, [255, 0, 0, 255]],
-    [70, [255, 165, 0, 255]],
-    [80, [255, 255, 0, 255]],
-    [90, [0, 255, 0, 255]],
-    [95, [0, 128, 255, 255]],
-    [100, [0, 0, 255, 255]]
+    [0.00, [0, 0, 0, 0]],
+    [0.45, [0, 0, 0, 255]],
+    [0.49, [110, 110, 110, 255]],
+    [0.61, [170, 170, 170, 255]],
+    [0.72, [10, 10, 190, 255]],
+    [0.83, [149, 149, 249, 255]],
+    [0.87, [95, 245, 100, 255]],
+    [0.92, [255, 255, 0, 255]],
+    [0.93, [255, 140, 0, 255]],
+    [0.97, [225, 3, 0, 255]],
+    [0.98, [139, 30, 77, 255]],
+    [1.00, [152, 124, 93, 255]],
+    [1.04, [255, 255, 255, 255]]
 ];
 
 const DIFFERENTIAL_REFLECTIVITY_STOPS = [
@@ -960,6 +940,7 @@ const DIFFERENTIAL_REFLECTIVITY_STOPS = [
     [5, [255, 0, 0, 255]],
     [7, [128, 0, 128, 255]]
 ];
+
 
 
 function interpolateStops(stops, value) {
@@ -1037,7 +1018,7 @@ async function loadProjectColorLut(product) {
         const extension = tableExtensions[selectedTable] || '.json';
         const filename = selectedTable + extension;
         
-        const response = await fetch(`https://jessewx2011.github.io/Deluge/json/colortables/${subdir}/${filename}`);
+        const response = await fetch(`../json/colortables/${subdir}/${filename}`);
         if (!response.ok) return null;
         const text = await response.text();
 
@@ -1059,21 +1040,21 @@ async function loadProjectColorLut(product) {
                 stops = Object.entries(json).map(([value, color]) => [Number(value), normalizeColor(color)]);
             }
         } else if (extension === '.pal') {
-            // Parse .pal format (custom format with lines like "color: value r g b" or "SolidColor: value r g b")
+            // Parse .pal format (custom format with lines like "Color: value r g b" or "SolidColor: value r g b")
             stops = [];
             const lines = text.split('\n');
             for (const line of lines) {
-                // Match both "color:" and "SolidColor:" formats
-                const match = line.match(/^(?:color(?:\d+)?|SolidColor):\s*(-?\d+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+(\d+)/);
+                // Match both "Color:" (case-insensitive), "color:", and "SolidColor:" formats
+                const match = line.match(/^(?:[Cc]olor(?:\d+)?|SolidColor):\s*(-?\d+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+(\d+)/);
                 if (match) {
-                    const value = parseFloat(match[1]);
+                    let value = parseFloat(match[1]);
                     const r = parseInt(match[2], 10);
                     const g = parseInt(match[3], 10);
                     const b = parseInt(match[4], 10);
+                    
                     stops.push([value, [r, g, b, 255]]);
                 }
             }
-            console.log(`Parsed ${stops.length} color stops from ${filename}`);
         }
 
         // Validate that we got valid stops
@@ -1121,12 +1102,19 @@ function isDifferentialReflectivityProduct(product) {
     return ['N0K'].includes((product || '').toUpperCase());
 }
 
-// Builds a 256-entry lookup table (byte value -> RGBA) for a given product.
-// `is16Level` is set when the data came from the legacy RLE Radial Data
-// Packet (0xAF1F) rather than the Digital Radial Data Array Packet (16) —
-// in that case only the first 16 entries are meaningful (see
-// parseRleRadialPacket's note on this being an approximate color mapping).
+// Cache for color lookup tables to avoid rebuilding
+const colorLutCache = new Map();
+const projectColorLutCache = new Map();
+
+
 async function buildColorLut(product, is16Level) {
+    const cacheKey = `${product}_${is16Level}`;
+    
+    // Return cached LUT if available
+    if (colorLutCache.has(cacheKey)) {
+        return colorLutCache.get(cacheKey);
+    }
+    
     const conversion = NEXRAD_DEFAULT_SCALE_OFFSET[product] || NEXRAD_DEFAULT_SCALE_OFFSET.N0B;
     const projectStops = await loadProjectColorLut(product);
     let stops;
@@ -1162,6 +1150,7 @@ async function buildColorLut(product, is16Level) {
             lut[level * 4 + 2] = rgba[2];
             lut[level * 4 + 3] = rgba[3];
         }
+        colorLutCache.set(cacheKey, lut);
         return lut;
     }
 
@@ -1173,13 +1162,29 @@ async function buildColorLut(product, is16Level) {
             rgba = [130, 130, 130, 90]; // range-folded convention
         } else {
             const physicalValue = (raw - conversion.offset) / conversion.scale;
-            rgba = interpolateStops(stops, physicalValue);
+            if (isCorrelationCoefficientProduct(product)) {
+                // CC values need special handling: raw bytes 9-255 map to 0.45-1.04
+                // Using scale=240 with offset=0 gives: 9/240=0.0375, 255/240=1.0625
+                // We need to map this range to the colortable range 0.45-1.04
+                const ccMin = 9 / 240; // 0.0375
+                const ccMax = 255 / 240; // 1.0625
+                const tableMin = stops[0][0]; // 0.45
+                const tableMax = stops[stops.length - 1][0]; // 1.04
+                // Linear interpolation from CC range to colortable range
+                const normalized = (physicalValue - ccMin) / (ccMax - ccMin);
+                const mappedValue = tableMin + normalized * (tableMax - tableMin);
+                rgba = interpolateStops(stops, mappedValue);
+            } else {
+                rgba = interpolateStops(stops, physicalValue);
+            }
         }
         lut[raw * 4] = rgba[0];
         lut[raw * 4 + 1] = rgba[1];
         lut[raw * 4 + 2] = rgba[2];
         lut[raw * 4 + 3] = rgba[3];
     }
+    
+    colorLutCache.set(cacheKey, lut);
     return lut;
 }
 
@@ -1188,68 +1193,107 @@ async function buildColorLut(product, is16Level) {
 // vertices, projected to Mapbox Mercator coordinates on the CPU.
 // ---------------------------------------------------------------------------
 
+// Inline Web Mercator projection (same math as mapboxgl.MercatorCoordinate.
+// fromLngLat with altitude 0), avoiding a per-vertex object allocation +
+// method-call from the Mapbox GL library across up to ~1.3M vertices.
+function lngLatToMercatorXY(lonDeg, latDeg) {
+    const x = (lonDeg + 180) / 360;
+    const sinLat = Math.sin((latDeg * Math.PI) / 180);
+    const y = 0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI);
+    return [x, y];
+}
+
 function buildRadialMesh(radial, radarLat, radarLon, colorLut) {
     const { numBins, numRadials, radials, firstBinKm, gateSizeKm } = radial;
 
     const cols = numBins + 1;
     const rows = numRadials + 1;
 
-    const azimuths = new Float32Array(rows);
-    const ranges = new Float32Array(cols);
+    const azimuths = new Float64Array(rows);
+    const ranges = new Float64Array(cols);
 
     for (let i = 0; i < numRadials; i++) {
         const startAz = (radials[i]?.startAngle ?? 0) % 360;
         const endAz = (startAz + (radials[i]?.angleDelta ?? 0)) % 360;
-        const centerAz = (startAz + endAz) / 2;
-        azimuths[i] = centerAz;
+        azimuths[i] = (startAz + endAz) / 2;
     }
 
     // The last boundary row should be the end of the last radial, not the
-    // start of a non-existent one. That keeps the fan mesh closed without
-    // introducing an extra, poorly defined sweep edge.
+    // start of a non-existent one, so the fan mesh closes cleanly.
     if (numRadials > 0) {
         const lastRadial = radials[numRadials - 1];
         const lastStartAz = (lastRadial?.startAngle ?? 0) % 360;
-        const lastEndAz = (lastStartAz + (lastRadial?.angleDelta ?? 0)) % 360;
-        azimuths[numRadials] = lastEndAz;
+        azimuths[numRadials] = (lastStartAz + (lastRadial?.angleDelta ?? 0)) % 360;
     }
 
     const gateWidthKm = gateSizeKm || 1;
     for (let col = 0; col < cols; col++) {
-        // Use the center of each range gate rather than the gate edge. This
-        // makes the projected quad cells line up with the actual radial sample
-        // locations more closely.
+        // Center of each range gate rather than the gate edge, so projected
+        // quad cells line up with the actual radial sample locations.
         ranges[col] = ((firstBinKm || 0) + gateWidthKm / 2) + col * gateWidthKm;
     }
 
     const positions = new Float32Array(rows * cols * 2);
     const uvs = new Float32Array(rows * cols * 2);
 
+    // Precompute the parts of the spherical destination-point formula that
+    // only depend on range (shared across every row) once, up front, instead
+    // of recomputing them for every single vertex — this is the single
+    // biggest cost in mesh generation since it turns an O(rows*cols) amount
+    // of trig into O(rows + cols).
+    const lat1 = (radarLat * Math.PI) / 180;
+    const lon1 = (radarLon * Math.PI) / 180;
+    const sinLat1 = Math.sin(lat1);
+    const cosLat1 = Math.cos(lat1);
+
+    const sinAngDist = new Float64Array(cols);
+    const cosAngDist = new Float64Array(cols);
+    for (let col = 0; col < cols; col++) {
+        const angDist = ranges[col] / EARTH_RADIUS_KM;
+        sinAngDist[col] = Math.sin(angDist);
+        cosAngDist[col] = Math.cos(angDist);
+    }
+
+    const invNumBins = 1 / numBins;
+    const invNumRadials = 1 / numRadials;
+    const rad2deg = 180 / Math.PI;
+
     for (let row = 0; row < rows; row++) {
-        const azimuth = azimuths[row];
-        const bearingDeg = (azimuth + 360) % 360;
+        const bearingDeg = (azimuths[row] + 360) % 360;
+        const bearing = (bearingDeg * Math.PI) / 180;
+        const sinBearing = Math.sin(bearing);
+        const cosBearing = Math.cos(bearing);
+        const uvY = row * invNumRadials;
+        const rowBase = row * cols;
 
         for (let col = 0; col < cols; col++) {
-            const rangeKm = ranges[col];
-            const [lon, lat] = destinationPoint(radarLat, radarLon, bearingDeg, rangeKm);
-            const mercator = mapboxgl.MercatorCoordinate.fromLngLat([lon, lat], 0);
+            const sinAd = sinAngDist[col];
+            const cosAd = cosAngDist[col];
 
-            const vertexIndex = row * cols + col;
-            positions[vertexIndex * 2] = mercator.x;
-            positions[vertexIndex * 2 + 1] = mercator.y;
+            const sinLat2 = sinLat1 * cosAd + cosLat1 * sinAd * cosBearing;
+            const lat2 = Math.asin(sinLat2);
+            const lon2 = lon1 + Math.atan2(sinBearing * sinAd * cosLat1, cosAd - sinLat1 * sinLat2);
 
-            uvs[vertexIndex * 2] = col / numBins;
-            uvs[vertexIndex * 2 + 1] = row / numRadials;
+            const [x, y] = lngLatToMercatorXY(lon2 * rad2deg, lat2 * rad2deg);
+
+            const vertexIndex = rowBase + col;
+            positions[vertexIndex * 2] = x;
+            positions[vertexIndex * 2 + 1] = y;
+
+            uvs[vertexIndex * 2] = col * invNumBins;
+            uvs[vertexIndex * 2 + 1] = uvY;
         }
     }
 
     const indices = new Uint32Array(numRadials * numBins * 6);
     let idx = 0;
     for (let row = 0; row < numRadials; row++) {
+        const rowBase = row * cols;
+        const nextRowBase = rowBase + cols;
         for (let col = 0; col < numBins; col++) {
-            const topLeft = row * cols + col;
+            const topLeft = rowBase + col;
             const topRight = topLeft + 1;
-            const bottomLeft = (row + 1) * cols + col;
+            const bottomLeft = nextRowBase + col;
             const bottomRight = bottomLeft + 1;
 
             indices[idx++] = topLeft;
@@ -1265,22 +1309,30 @@ function buildRadialMesh(radial, radarLat, radarLon, colorLut) {
     // Texture: one texel per gate (numBins wide, numRadials tall), colored
     // via the LUT. This is what the fragment shader samples — the CPU does
     // the byte -> color lookup once per frame load, not per pixel.
-    const textureData = new Uint8ClampedArray(numRadials * numBins * 4);
+    //
+    // Both the LUT and the texture are written as Uint32 views aliased over
+    // the same underlying bytes, so each texel is one 32-bit write instead
+    // of four 8-bit writes.
+    const textureBuffer = new ArrayBuffer(numRadials * numBins * 4);
+    const textureData = new Uint8ClampedArray(textureBuffer);
+    const textureData32 = new Uint32Array(textureBuffer);
+    const colorLut32 = new Uint32Array(colorLut.buffer, colorLut.byteOffset, colorLut.byteLength / 4);
+
     for (let row = 0; row < numRadials; row++) {
         const gateValues = radials[row].data;
         if (!gateValues) {
             console.warn(`[Deluge] Missing gate data for radial ${row}, skipping`);
             continue;
         }
+
+        const rowBase = row * numBins;
+        const gateLen = gateValues.length;
+
         for (let col = 0; col < numBins; col++) {
-            const raw = col < gateValues.length ? gateValues[col] : 0;
+            const raw = col < gateLen ? gateValues[col] : 0;
             // Bounds check for color LUT lookup to prevent rendering glitches
-            const lutIndex = Math.min(Math.max(raw, 0), 255) * 4;
-            const texelIndex = (row * numBins + col) * 4;
-            textureData[texelIndex] = colorLut[lutIndex];
-            textureData[texelIndex + 1] = colorLut[lutIndex + 1];
-            textureData[texelIndex + 2] = colorLut[lutIndex + 2];
-            textureData[texelIndex + 3] = colorLut[lutIndex + 3];
+            const clamped = raw < 0 ? 0 : (raw > 255 ? 255 : raw);
+            textureData32[rowBase + col] = colorLut32[clamped];
         }
     }
 
@@ -1319,21 +1371,13 @@ async function tryRenderNexradWebGL(radarId, product, specificKey = null) {
         targetKey = keys[keys.length - 1];
     }
 
-    const rawBuffer = await fetchLevelIIIBuffer(targetKey);
-    const parsedProduct = await parseLevelIIIBuffer(rawBuffer, product);
+    const activeProduct = product.toUpperCase();
+    const frame = await loadSingleFrame(targetKey, activeProduct);
 
-    console.info('[Deluge] Parsed NEXRAD Level III product:', parsedProduct.pdb, parsedProduct.radial.numRadials, 'radials x', parsedProduct.radial.numBins, 'bins');
+    window.NexradRenderer.render(frame.mesh);
+    setScanTime(nexradEpochToDate(frame.parsed.pdb.volumeScanDate, frame.parsed.pdb.volumeScanStartTime));
 
-    const colorLut = await buildColorLut(product.toUpperCase(), parsedProduct.radial.is16Level);
-    const mesh = buildRadialMesh(parsedProduct.radial, parsedProduct.pdb.latitude, parsedProduct.pdb.longitude, colorLut);
-
-    window.NexradRenderer.render(mesh);
-
-    const scanDate = nexradEpochToDate(parsedProduct.pdb.volumeScanDate, parsedProduct.pdb.volumeScanStartTime);
-    const scanTimeEl = document.getElementById('scanTime');
-    if (scanTimeEl) scanTimeEl.textContent = formatScanTimeUTC(scanDate) || '';
-
-    return parsedProduct;
+    return frame.parsed;
 }
 
 // ---------------------------------------------------------------------------
@@ -1351,8 +1395,7 @@ function clearRadarLayers() {
     if (typeof map !== 'undefined' && map && typeof map.getLayer === 'function' && map.getLayer('radar-image-layer')) {
         map.setLayoutProperty('radar-image-layer', 'visibility', 'none');
     }
-    const scanTimeEl = document.getElementById('scanTime');
-    if (scanTimeEl) scanTimeEl.textContent = '';
+    setScanTime(null);
 }
 window.clearRadarLayers = clearRadarLayers;
 
@@ -1379,7 +1422,6 @@ window.refreshProductDrawerForSite = refreshProductDrawerForSite;
 async function switchRadarSite(newRadarId, product) {
     // Wait for page to fully load before fetching data
     if (!window.pageFullyLoaded) {
-        console.log('Waiting for page to load before fetching radar data...');
         await new Promise(resolve => {
             if (window.pageFullyLoaded) {
                 resolve();

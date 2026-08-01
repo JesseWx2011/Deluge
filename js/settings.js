@@ -50,7 +50,7 @@ const productValueRanges = {
     'NBU': { min: -140, max: 140, unit: 'kts' },
     'N2U': { min: -140, max: 140, unit: 'kts' },
     'N3U': { min: -140, max: 140, unit: 'kts' },
-    'N0C': { min: 0, max: 100, unit: '%' },
+    'N0C': { min: 0.45, max: 1.04, unit: '' },
     'N0K': { min: -5, max: 10, unit: 'dB' },
     'N0H': { min: 0, max: 10, unit: 'HC' },
     'SW0': { min: 0, max: 63, unit: 'm/s' },
@@ -64,7 +64,8 @@ const productValueRanges = {
     'TV2': { min: -50, max: 50, unit: 'm/s' }
 };
 
-// Color table gradients for different products
+
+// Backup Coolor Gradients if loading the .pal file fails.
 const colorTableGradients = {
     reflectivity: 'linear-gradient(to top, #969153, #cacdaa, #919ab4, #415b9e, #21c034, #0da212, #ffe200, #ff0000, #ffffff, #b200ff, #05ecf0, #012020)',
     velocity: 'linear-gradient(to top, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)',
@@ -169,7 +170,8 @@ async function updateColorbar(productId) {
                 } else if (extension === '.pal') {
                     const lines = text.split('\n');
                     for (const line of lines) {
-                        const match = line.match(/^(?:color(?:\d+)?|SolidColor):\s*(-?\d+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+(\d+)/);
+                        // ✅ FIXED LINE: Now matches "Color:", "color:", etc.
+                        const match = line.match(/^(?:[Cc]olor(?:\d+)?|SolidColor):\s*(-?\d+(?:\.\d+)?)\s+(\d+)\s+(\d+)\s+(\d+)/i);
                         if (match) {
                             const value = parseFloat(match[1]);
                             const r = parseInt(match[2], 10);
@@ -228,9 +230,14 @@ async function updateColorbar(productId) {
     
     colortable.style.backgroundImage = gradient;
     
-    // Always use increments of 10
+    // Always use increments of 10, including 0
     const niceStep = 10;
     let intermediateTicks = [];
+    
+    // Always include 0 if it's within the range
+    if (range.min <= 0 && range.max >= 0) {
+        intermediateTicks.push(0);
+    }
     
     // Calculate the first tick that aligns with 10 strictly greater than min
     let currentTick = Math.ceil(range.min / 10) * 10;
@@ -238,9 +245,15 @@ async function updateColorbar(productId) {
     
     // Get every 10th value up to strictly less than max
     while (currentTick < range.max) {
-        intermediateTicks.push(currentTick);
+        // Don't add duplicate 0
+        if (currentTick !== 0 || !intermediateTicks.includes(0)) {
+            intermediateTicks.push(currentTick);
+        }
         currentTick += niceStep;
     }
+    
+    // Sort ticks and remove duplicates
+    intermediateTicks = [...new Set(intermediateTicks)].sort((a, b) => a - b);
     
     // If there are too many intermediate ticks, thin them out (reserving spots for min & max)
     if (intermediateTicks.length > 8) {
@@ -310,7 +323,10 @@ function initColorbarHover() {
         const range = window.currentColorbarRange || { min: -20, max: 89.9, unit: 'dBZ' }; // For some weird reason, I have to set it to 89.9 instead of 90.0 because then the tooltip value shows 90.1, which makes the whole thing slightly off. This code block will be fully corrected at a later point in development.
         const value = range.min + (percentage * (range.max - range.min));
         
-        tooltip.textContent = `${value.toFixed(1)} ${range.unit}`;
+        // Use 3 decimal places for correlation coefficient, 1 for others
+        const currentProduct = window.currentSelectedProduct || 'N0B';
+        const isCC = currentProduct === 'N0C';
+        tooltip.textContent = `${value.toFixed(isCC ? 3 : 1)} ${range.unit}`;
         tooltip.style.top = `${y}px`;
     });
     
@@ -322,6 +338,9 @@ function initColorbarHover() {
 // Initialize colorbar when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     initColorbarHover();
+    // Update colorbar on page load with default product
+    const defaultProduct = window.currentSelectedProduct || 'N0B';
+    updateColorbar(defaultProduct);
 });
 
 window.updateColorbar = updateColorbar;

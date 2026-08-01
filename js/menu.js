@@ -1,42 +1,32 @@
-// Top-right settings menu + top-left layers dropdown (camera overlay / alerts / storm tracks toggles)
+// Top-right settings menu + Map Layers menu (camera overlay / alerts / storm
+// tracks / lightning / mesoscale discussions / storm reports / NHC cone).
 
 const settingsButton = document.getElementById("settingsButton");
 const settingsModalContainer = document.getElementById("settingsModalContainer");
 
 const layersButton = document.getElementById("layersButton");
+const layersRow = document.getElementById("layersRow");
 const layersDropdown = document.getElementById("layersDropdown");
 
-let camerasVisible = true;
-let alertsVisible = true;
-let stormTracksVisible = true;
-let lightningVisible = true;
-
 function openSettingsModal() {
-    if (settingsModalContainer) {
-        settingsModalContainer.style.display = "flex";
-    }
+    if (settingsModalContainer) settingsModalContainer.style.display = "flex";
 }
 
 function closeSettingsModal() {
-    if (settingsModalContainer) {
-        settingsModalContainer.style.display = "none";
-    }
+    if (settingsModalContainer) settingsModalContainer.style.display = "none";
 }
-
 window.closeSettingsModal = closeSettingsModal;
 
 function toggleLayersDropdown() {
     layersDropdown.classList.toggle("open");
 }
 
-function closeMenusOnOutsideClick(event) {
-    if (layersDropdown && layersButton &&
-        !layersDropdown.contains(event.target) && !layersButton.contains(event.target)) {
+document.addEventListener("click", (event) => {
+    if (layersDropdown && layersRow &&
+        !layersDropdown.contains(event.target) && !layersRow.contains(event.target)) {
         layersDropdown.classList.remove("open");
     }
-}
-
-document.addEventListener("click", closeMenusOnOutsideClick);
+});
 
 if (settingsButton) {
     settingsButton.addEventListener("click", (e) => {
@@ -52,94 +42,89 @@ if (layersButton) {
     });
 }
 
-// Cameras toggle
-function toggleCameras() {
-    camerasVisible = !camerasVisible;
-
-    const toggle = document.getElementById("camerasToggle");
-    if (toggle) toggle.classList.toggle("active", camerasVisible);
-
-    if (map.getLayer("isuCamsLayer")) {
-        map.setLayoutProperty("isuCamsLayer", "visibility", camerasVisible ? "visible" : "none");
-    }
-}
-
-// Alerts toggle
-function toggleAlertsLayer() {
-    alertsVisible = !alertsVisible;
-
-    const toggle = document.getElementById("alertsToggle");
-    if (toggle) toggle.classList.toggle("active", alertsVisible);
-
-    ["alerts-layer", "alerts-outline"].forEach(layerId => {
-        if (map.getLayer(layerId)) {
-            map.setLayoutProperty(layerId, "visibility", alertsVisible ? "visible" : "none");
-        }
+// Clicking anywhere else on the row (e.g. the label) also toggles the
+// dropdown; the button above stops propagation so this never double-fires.
+if (layersRow) {
+    layersRow.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleLayersDropdown();
     });
 }
 
-function toggleStormTracksLayer() {
-    stormTracksVisible = !stormTracksVisible;
+// ------------------------- Layer Toggles -------------------------
+// Each entry describes one Map Layers switch: its toggle id, whether it
+// starts active, the map layer ids it controls directly (if any), and an
+// optional external setter (for layers whose fetch/visibility logic lives
+// in another file, e.g. extra-layers.js).
 
-    const toggle = document.getElementById("stormTracksToggle");
-    if (toggle) toggle.classList.toggle("active", stormTracksVisible);
+const LAYER_TOGGLES = {
+    cameras: { toggleId: 'camerasToggle', layerIds: ['isuCamsLayer'], defaultActive: true },
+    alerts: { toggleId: 'alertsToggle', layerIds: ['alerts-layer', 'alerts-outline'], defaultActive: true },
+    stormTracks: { toggleId: 'stormTracksToggle', layerIds: ['storm-track-lines-layer', 'storm-track-ticks-layer', 'storm-track-points-layer'], defaultActive: true },
+    lightning: { toggleId: 'lightningToggle', layerIds: ['lightning-layer'], defaultActive: true },
+    mesoscale: { toggleId: 'mesoscaleToggle', setVisible: (v) => window.setMesoscaleVisibility && window.setMesoscaleVisibility(v), defaultActive: false },
+    lsr: { toggleId: 'lsrToggle', setVisible: (v) => window.setLsrVisibility && window.setLsrVisibility(v), defaultActive: false },
+    nhcCone: { toggleId: 'nhcConeToggle', setVisible: (v) => window.setNhcConeVisibility && window.setNhcConeVisibility(v), defaultActive: false }
+};
 
-    ["storm-track-lines-layer", "storm-track-ticks-layer", "storm-track-points-layer"].forEach(layerId => {
-        if (map.getLayer(layerId)) {
-            map.setLayoutProperty(layerId, "visibility", stormTracksVisible ? "visible" : "none");
-        }
-    });
-}
+const layerVisibility = {};
 
-// Lightning toggle
-function toggleLightningLayer() {
-    lightningVisible = !lightningVisible;
+function applyLayerVisibility(key) {
+    const config = LAYER_TOGGLES[key];
+    const visible = layerVisibility[key];
 
-    const toggle = document.getElementById("lightningToggle");
-    if (toggle) toggle.classList.toggle("active", lightningVisible);
-
-    if (map.getLayer("lightning-layer")) {
-        map.setLayoutProperty("lightning-layer", "visibility", lightningVisible ? "visible" : "none");
+    if (config.layerIds) {
+        config.layerIds.forEach((layerId) => {
+            if (map.getLayer(layerId)) {
+                map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+            }
+        });
     }
+
+    if (config.setVisible) config.setVisible(visible);
 }
+
+function toggleLayer(key) {
+    const config = LAYER_TOGGLES[key];
+    layerVisibility[key] = !layerVisibility[key];
+
+    const toggle = document.getElementById(config.toggleId);
+    if (toggle) toggle.classList.toggle("active", layerVisibility[key]);
+
+    applyLayerVisibility(key);
+}
+
+// Named wrappers kept for external callers (e.g. layers.js calls
+// window.toggleCameras() directly).
+function toggleCameras() { toggleLayer('cameras'); }
+function toggleAlertsLayer() { toggleLayer('alerts'); }
+function toggleStormTracksLayer() { toggleLayer('stormTracks'); }
+function toggleLightningLayer() { toggleLayer('lightning'); }
+function toggleMesoscaleLayer() { toggleLayer('mesoscale'); }
+function toggleLsrLayer() { toggleLayer('lsr'); }
+function toggleNhcConeLayer() { toggleLayer('nhcCone'); }
+
+window.toggleCameras = toggleCameras;
+window.toggleAlertsLayer = toggleAlertsLayer;
+window.toggleStormTracksLayer = toggleStormTracksLayer;
+window.toggleLightningLayer = toggleLightningLayer;
+window.toggleMesoscaleLayer = toggleMesoscaleLayer;
+window.toggleLsrLayer = toggleLsrLayer;
+window.toggleNhcConeLayer = toggleNhcConeLayer;
 
 function menuClicks() {
-    const camerasToggle = document.getElementById("camerasToggle");
-    const alertsToggle = document.getElementById("alertsToggle");
-    const stormTracksToggle = document.getElementById("stormTracksToggle");
-    const lightningToggle = document.getElementById("lightningToggle");
+    Object.entries(LAYER_TOGGLES).forEach(([key, config]) => {
+        layerVisibility[key] = config.defaultActive;
 
-    if (camerasToggle) {
-        camerasToggle.classList.add("active");
-        camerasToggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-            toggleCameras();
-        });
-    }
+        const toggle = document.getElementById(config.toggleId);
+        if (!toggle) return;
 
-    if (alertsToggle) {
-        alertsToggle.classList.add("active");
-        alertsToggle.addEventListener("click", (e) => {
+        toggle.classList.toggle("active", config.defaultActive);
+        toggle.addEventListener("click", (e) => {
             e.stopPropagation();
-            toggleAlertsLayer();
+            toggleLayer(key);
         });
-    }
-
-    if (stormTracksToggle) {
-        stormTracksToggle.classList.add("active");
-        stormTracksToggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-            toggleStormTracksLayer();
-        });
-    }
-
-    if (lightningToggle) {
-        lightningToggle.classList.add("active");
-        lightningToggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-            toggleLightningLayer();
-        });
-    }
+    });
 }
 
 menuClicks();

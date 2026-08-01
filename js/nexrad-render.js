@@ -1,6 +1,6 @@
 // Generic WebGL rendering plumbing for a textured mesh, drawn as a Mapbox GL
-// "custom" layer. This file knows nothing about NEXRAD or bzip2 — it just
-// takes mercator-projected vertices + UVs + an RGBA texture and draws them.
+// "custom" layer. Knows nothing about NEXRAD specifically — just takes
+// mercator-projected vertices + UVs + an RGBA texture and draws them.
 // nexrad.js builds the mesh/texture and hands it to window.NexradRenderer.
 
 const NEXRAD_LAYER_ID = 'nexrad-webgl-layer';
@@ -51,8 +51,7 @@ function createNexradProgram(gl) {
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        const info = gl.getProgramInfoLog(program);
-        throw new Error(`NEXRAD program link error: ${info}`);
+        throw new Error(`NEXRAD program link error: ${gl.getProgramInfoLog(program)}`);
     }
     return program;
 }
@@ -115,9 +114,7 @@ function createNexradCustomLayer() {
                 pendingMesh = null;
             }
 
-            if (typeof window.ensureRadarLayerOrder === 'function') {
-                window.ensureRadarLayerOrder();
-            }
+            if (typeof window.ensureRadarLayerOrder === 'function') window.ensureRadarLayerOrder();
         },
 
         setMesh(mesh, gl) {
@@ -173,18 +170,15 @@ window.NexradRenderer = (function () {
         if (!mapInstance || typeof mapInstance.getLayer !== 'function' || typeof mapInstance.addLayer !== 'function') {
             throw new Error('Map is not ready yet.');
         }
-        if (!layerInstance) {
-            layerInstance = createNexradCustomLayer();
-        }
+        if (!layerInstance) layerInstance = createNexradCustomLayer();
+
         if (!mapInstance.getLayer(NEXRAD_LAYER_ID)) {
             const beforeLayer = mapInstance.getLayer('alerts-outline')
                 ? 'alerts-outline'
                 : (mapInstance.getLayer('road-minor') ? 'road-minor' : undefined);
 
             mapInstance.addLayer(layerInstance, beforeLayer);
-            if (typeof window.ensureRadarLayerOrder === 'function') {
-                window.ensureRadarLayerOrder();
-            }
+            if (typeof window.ensureRadarLayerOrder === 'function') window.ensureRadarLayerOrder();
         }
         return layerInstance;
     }
@@ -197,9 +191,7 @@ window.NexradRenderer = (function () {
             const mapInstance = getNexradMap();
             const gl = mapInstance && mapInstance.painter && mapInstance.painter.context && mapInstance.painter.context.gl;
             layer.setMesh(mesh, gl);
-            if (mapInstance && typeof mapInstance.triggerRepaint === 'function') {
-                mapInstance.triggerRepaint();
-            }
+            if (mapInstance && typeof mapInstance.triggerRepaint === 'function') mapInstance.triggerRepaint();
         },
         setVisible(isVisible) {
             const mapInstance = getNexradMap();
@@ -210,9 +202,7 @@ window.NexradRenderer = (function () {
         setOpacity(value) {
             if (layerInstance) layerInstance.setOpacity(value);
             const mapInstance = getNexradMap();
-            if (mapInstance && typeof mapInstance.triggerRepaint === 'function') {
-                mapInstance.triggerRepaint();
-            }
+            if (mapInstance && typeof mapInstance.triggerRepaint === 'function') mapInstance.triggerRepaint();
         },
         remove() {
             const mapInstance = getNexradMap();
