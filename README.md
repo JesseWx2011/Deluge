@@ -1,11 +1,11 @@
 # Deluge
 Deluge is a minimal weather app for all devices, including base features such as outlooks, radar, and more.
 
-Deluge is currently in version BETA IV.
+Deluge is currently in version BETA V.
 
 <h2>Version</h2>
 
-The Current Version of this application is BETA IV.
+The Current Version of this application is BETA V.
 Changelogs can be found in the "Releases" tab.
 
 <h2>Creators and Contributors</h2>
