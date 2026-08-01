@@ -5,7 +5,7 @@ const webcamSources = [
 // Fetch local livestreams list from JSON configuration
 async function fetchLivestreams() {
     try {
-        const response = await fetch('../json/livestreams.json');
+        const response = await fetch('https://jessewx2011.github.io/Deluge/json/livestreams.json');
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
