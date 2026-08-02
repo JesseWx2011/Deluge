@@ -20236,6 +20236,20 @@
         "type": "m3u8",
         "lat": "38.80960864559075",
         "lon": "-97.6061531115407"
+      },
+      {
+        "name": "Milton FL Skycam",
+        "stream": "https://mistrtoothless-sat-images.hf.space/latest.jpg",
+        "type": "image",
+        "lat": "30.579087698640294",
+        "lon": "-86.96482341360989"
+      },
+      {
+        "name": "Tybee Island Live Cam",
+        "stream": "https://s78.ipcamlive.com/streams/4ez4qrf3b1wodin5k/stream.m3u8",
+        "type": "m3u8",
+        "lat": "32.00994270193943",
+        "lon": "-80.84119134698977"
       }
     ] 
   } 
