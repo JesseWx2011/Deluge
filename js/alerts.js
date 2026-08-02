@@ -1882,7 +1882,103 @@ function buildAlertPopup(properties) {
 
 }
 
+function formatAlertBannerClock(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '--:-- --';
 
+    const hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+
+    let tzAbbr = 'LT';
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(date);
+        const tzPart = parts.find((part) => part.type === 'timeZoneName');
+        if (tzPart && tzPart.value) tzAbbr = tzPart.value;
+    } catch (e) {
+        // ignore Intl limitations
+    }
+
+    return `${displayHours}:${minutes} ${ampm} ${tzAbbr}`;
+}
+
+function getAlertStateText(properties = {}) {
+    const stateList = Array.isArray(properties.states) ? properties.states : [];
+    const stateLabels = stateList
+        .map((entry) => {
+            if (!entry) return null;
+            if (typeof entry === 'string') return entry.trim();
+            const name = String(entry.name || '').trim();
+            if (name) return name;
+            const code = String(entry.code || '').trim();
+            return code || null;
+        })
+        .filter(Boolean);
+
+    if (stateLabels.length > 0) {
+        return [...new Set(stateLabels)].join(', ');
+    }
+
+    const geocode = properties.geocode || {};
+    const ugcList = geocode.UGC || geocode.SAME;
+    if (Array.isArray(ugcList) && ugcList.length > 0) {
+        return [...new Set(ugcList.map((code) => String(code).slice(0, 2).toUpperCase()))].join(', ');
+    }
+
+    return null;
+}
+
+function setAlertBannerOverride(properties) {
+    if (!properties) {
+        window.activeAlertBannerOverride = null;
+        if (typeof window.refreshProductBanner === 'function') {
+            window.refreshProductBanner();
+        }
+        return;
+    }
+
+    const normalizedEvent = normalizeEvent(properties.event);
+    const stateText = getAlertStateText(properties);
+    const expires = properties.expires ? new Date(properties.expires) : null;
+    const subtitle = stateText ? `${normalizedEvent} in ${stateText}` : normalizedEvent;
+
+    window.activeAlertBannerOverride = {
+        title: normalizedEvent.toUpperCase(),
+        subtitle: subtitle.toUpperCase(),
+        clock: formatAlertBannerClock(expires),
+        date: 'Expires:'
+    };
+
+    if (typeof window.refreshProductBanner === 'function') {
+        window.refreshProductBanner();
+    }
+}
+
+window.setAlertBannerOverride = setAlertBannerOverride;
+window.clearAlertBannerOverride = () => setAlertBannerOverride(null);
+
+function showAlertPopup(feature, lngLat) {
+    const properties = feature && feature.properties ? feature.properties : feature;
+    if (!properties) return;
+
+    setAlertBannerOverride(properties);
+
+    const popupHtml = buildAlertPopup(properties);
+    const popup = new mapboxgl.Popup({
+        closeButton: true,
+        className: 'alertMapboxPopup',
+        maxWidth: '320px'
+    })
+        .setLngLat(lngLat)
+        .setHTML(popupHtml)
+        .addTo(map);
+
+    popup.on('close', () => {
+        if (typeof window.clearAlertBannerOverride === 'function') {
+            window.clearAlertBannerOverride();
+        }
+    });
+}
 
 // Fetch and display alerts
 
@@ -2295,27 +2391,10 @@ function addAlertsLayer(alertData) {
 
         if (e.features.length > 0) {
 
-            const properties = e.features[0].properties;
+            const feature = e.features[0];
+            const properties = feature.properties;
 
-            const popupHtml = buildAlertPopup(properties);
-
-            
-
-            new mapboxgl.Popup({ 
-
-                closeButton: true, 
-
-                className: 'alertMapboxPopup',
-
-                maxWidth: '320px'
-
-            })
-
-            .setLngLat(e.lngLat)
-
-            .setHTML(popupHtml)
-
-            .addTo(map);
+            showAlertPopup(feature, e.lngLat);
 
         }
 
@@ -2437,17 +2516,48 @@ if (typeof window.registerLayerReinit === 'function') {
 
 }
 
+function getAlertPriorityRank(feature) {
+    const rules = Array.isArray(alertPriorityRules) ? alertPriorityRules : [];
+    for (let index = 0; index < rules.length; index += 1) {
+        const rule = rules[index];
+        if (rule && typeof rule.test === 'function') {
+            try {
+                if (rule.test(feature)) return index;
+            } catch (e) {
+                // ignore malformed alert entries
+            }
+        }
+    }
+    return alertPriorityRules.length;
+}
+
+function sortAlertFeaturesByPriority(features = []) {
+    if (!Array.isArray(features) || features.length < 2) return features;
+
+    return [...features].sort((a, b) => {
+        const aRank = getAlertPriorityRank(a);
+        const bRank = getAlertPriorityRank(b);
+        if (aRank !== bRank) return aRank - bRank;
+
+        const aTitle = String((a && a.properties && a.properties.event) || '').toLowerCase();
+        const bTitle = String((b && b.properties && b.properties.event) || '').toLowerCase();
+        return aTitle.localeCompare(bTitle);
+    });
+}
+
 // Render active alerts into the top-right menu list
 function renderActiveAlertsMenu(features = []) {
     const container = document.getElementById('alertsMenuList');
     if (!container) return;
-    window.activeAlerts = features || [];
-    if (!features || features.length === 0) {
+
+    const orderedFeatures = sortAlertFeaturesByPriority(features || []);
+    window.activeAlerts = orderedFeatures;
+    if (!orderedFeatures || orderedFeatures.length === 0) {
         container.innerHTML = '<div class="alertsEmpty">No active alerts</div>';
         return;
     }
 
-    container.innerHTML = features.map((f, i) => {
+    container.innerHTML = orderedFeatures.map((f, i) => {
         const ev = normalizeEvent(f.properties.event);
         const title = getAlertDisplayName(ev, f.properties);
         const details = computeAlertDetails(f.properties) || [];

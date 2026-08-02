@@ -5,7 +5,7 @@ const webcamSources = [
 // Fetch local livestreams list from JSON configuration
 async function fetchLivestreams() {
     try {
-        const response = await fetch('https://jessewx2011.github.io/Deluge/json/livestreams.json');
+        const response = await fetch('../json/livestreams.json');
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
@@ -110,6 +110,68 @@ function toggleWebcamDock() {
     setWebcamDockOpen(!webcamDockOpen);
 }
 
+function formatDockFullscreenTimestamp(date) {
+    const time = date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+    const dateText = date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+    });
+    return {
+        clock: time,
+        date: dateText
+    };
+}
+
+function setDockFullscreenBanner(item) {
+    const now = new Date();
+    const { clock, date } = formatDockFullscreenTimestamp(now);
+    window.activeDockFullscreenBannerOverride = {
+        title: item?.name || 'Camera',
+        subtitle: item?.location || 'Location unavailable',
+        clock,
+        date
+    };
+
+    if (typeof window.refreshDockFullscreenBanner === 'function') {
+        window.refreshDockFullscreenBanner();
+    }
+}
+
+function clearDockFullscreenBanner() {
+    window.activeDockFullscreenBannerOverride = null;
+    if (typeof window.refreshDockFullscreenBanner === 'function') {
+        window.refreshDockFullscreenBanner();
+    }
+}
+
+function bindDockFullscreenVideoEvents(videoEl, item) {
+    if (!videoEl) return;
+
+    const onFullscreenChange = () => {
+        const isFullscreen = !!(document.fullscreenElement && document.fullscreenElement === videoEl);
+        if (isFullscreen) {
+            setDockFullscreenBanner(item);
+        } else {
+            clearDockFullscreenBanner();
+        }
+    };
+
+    videoEl.addEventListener('dblclick', async () => {
+        if (document.fullscreenElement === videoEl) {
+            await document.exitFullscreen?.();
+            return;
+        }
+        await videoEl.requestFullscreen?.();
+    });
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+}
+
 function renderWebcamDock() {
     const dockItems = document.getElementById('webcamDockItems');
     if (!dockItems) return;
@@ -160,6 +222,7 @@ function renderWebcamDock() {
         const videoEl = card.querySelector('.webcamDockVideo');
         if (videoEl && (item.type === 'm3u8' || item.type === 'mpd')) {
             setupDockVideo(videoEl, item, index);
+            bindDockFullscreenVideoEvents(videoEl, item);
         }
 
         const imageEl = card.querySelector('.webcamDockImage');

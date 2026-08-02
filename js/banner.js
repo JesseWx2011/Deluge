@@ -4,6 +4,10 @@ const PRODUCT_BANNER_POLL_MS = 500;
 
 let productBannerLastTitle = null;
 let productBannerLastSubtitle = null;
+let dockFullscreenBannerLastTitle = null;
+let dockFullscreenBannerLastSubtitle = null;
+
+window.activeDockFullscreenBannerOverride = null;
 
 function isPhoneDevice() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
@@ -92,6 +96,13 @@ function updateProductBannerClock() {
     const dateEl = document.getElementById('productBannerDate');
     if (!clockEl || !dateEl) return;
 
+    const override = window.activeAlertBannerOverride;
+    if (override) {
+        clockEl.textContent = override.clock || '--:-- --';
+        dateEl.textContent = override.date || 'Expires:';
+        return;
+    }
+
     const displayDate = getBannerDisplayDate(isOutlookModeActiveForBanner());
     clockEl.textContent = formatBannerClock(displayDate);
     dateEl.textContent = formatBannerDate(displayDate);
@@ -105,24 +116,37 @@ function refreshProductBanner() {
     }
 
     const banner = document.getElementById('productBanner');
+    if (window.activeDockFullscreenBannerOverride) {
+        banner.classList.remove('visible');
+        return;
+    }
     const titleEl = document.getElementById('productBannerTitle');
     const subtitleEl = document.getElementById('productBannerSubtitle');
-    if (!banner || !titleEl || !subtitleEl) return;
+    const clockEl = document.getElementById('productBannerClock');
+    const dateEl = document.getElementById('productBannerDate');
+    if (!banner || !titleEl || !subtitleEl || !clockEl || !dateEl) return;
 
     if (isNavigationModeActiveForBanner()) {
         banner.classList.remove('visible');
         return;
     }
 
+    const override = window.activeAlertBannerOverride;
     const outlookMode = isOutlookModeActiveForBanner();
-    const content = outlookMode ? getOutlookBannerContent() : getRadarBannerContent();
+    const content = override
+        ? {
+            title: override.title || 'ALERT',
+            subtitle: override.subtitle || '',
+            clock: override.clock || '--:-- --',
+            date: override.date || 'Expires'
+          }
+        : (outlookMode ? getOutlookBannerContent() : getRadarBannerContent());
 
     if (!content) {
         banner.classList.remove('visible');
         return;
     }
 
-    // Only touch DOM text nodes when something changed, to avoid reflow churn.
     if (content.title !== productBannerLastTitle) {
         titleEl.textContent = content.title;
         productBannerLastTitle = content.title;
@@ -133,13 +157,88 @@ function refreshProductBanner() {
         productBannerLastSubtitle = content.subtitle;
     }
 
-    banner.classList.toggle('outlookVariant', outlookMode);
-    banner.classList.add('visible');
+    if (override) {
+        clockEl.textContent = content.clock;
+        dateEl.textContent = content.date;
+    } else {
+        updateProductBannerClock();
+    }
 
-    updateProductBannerClock();
+    banner.classList.toggle('outlookVariant', outlookMode && !override);
+    banner.classList.add('visible');
+}
+
+function updateDockFullscreenBannerClock() {
+    const clockEl = document.getElementById('dockFullscreenBannerClock');
+    const dateEl = document.getElementById('dockFullscreenBannerDate');
+    if (!clockEl || !dateEl) return;
+
+    const override = window.activeDockFullscreenBannerOverride;
+    if (!override) {
+        clockEl.textContent = '--:-- --';
+        dateEl.textContent = '--- --/--/--';
+        return;
+    }
+
+    clockEl.textContent = override.clock || '--:-- --';
+    dateEl.textContent = override.date || formatBannerDate(new Date());
+}
+
+function refreshDockFullscreenBanner() {
+    const banner = document.getElementById('dockFullscreenBanner');
+    const titleEl = document.getElementById('dockFullscreenBannerTitle');
+    const subtitleEl = document.getElementById('dockFullscreenBannerSubtitle');
+    const clockEl = document.getElementById('dockFullscreenBannerClock');
+    const dateEl = document.getElementById('dockFullscreenBannerDate');
+    if (!banner || !titleEl || !subtitleEl || !clockEl || !dateEl) return;
+
+    const override = window.activeDockFullscreenBannerOverride;
+    if (!override) {
+        banner.classList.remove('visible');
+        return;
+    }
+
+    if (override.title !== dockFullscreenBannerLastTitle) {
+        titleEl.textContent = override.title || 'Camera';
+        dockFullscreenBannerLastTitle = override.title;
+    }
+    if (override.subtitle !== dockFullscreenBannerLastSubtitle) {
+        subtitleEl.textContent = override.subtitle || 'Location unavailable';
+        dockFullscreenBannerLastSubtitle = override.subtitle;
+    }
+
+    clockEl.textContent = override.clock || '--:-- --';
+    dateEl.textContent = override.date || formatBannerDate(new Date());
+    banner.classList.add('visible');
+}
+
+function initDockFullscreenBanner() {
+    if (document.getElementById('dockFullscreenBanner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'dockFullscreenBanner';
+    banner.className = 'dockFullscreenBanner';
+    banner.innerHTML = `
+        <div class="dockFullscreenBannerMain">
+            <div class="dockFullscreenBannerTitle" id="dockFullscreenBannerTitle">Camera</div>
+            <div class="dockFullscreenBannerSubtitle" id="dockFullscreenBannerSubtitle">Location unavailable</div>
+        </div>
+        <div class="dockFullscreenBannerDivider"></div>
+        <div class="dockFullscreenBannerTimeWrap">
+            <div class="dockFullscreenBannerClock" id="dockFullscreenBannerClock">--:-- --</div>
+            <div class="dockFullscreenBannerDate" id="dockFullscreenBannerDate">--- --/--/--</div>
+        </div>
+    `;
+    document.body.appendChild(banner);
+
+    refreshDockFullscreenBanner();
+    setInterval(refreshDockFullscreenBanner, PRODUCT_BANNER_POLL_MS);
+    setInterval(updateDockFullscreenBannerClock, 1000);
 }
 
 function initProductBanner() {
+    initDockFullscreenBanner();
+
     if (isPhoneDevice()) return;
     if (document.getElementById('productBanner')) return;
 
@@ -171,3 +270,4 @@ if (document.readyState === 'loading') {
 }
 
 window.refreshProductBanner = refreshProductBanner;
+window.refreshDockFullscreenBanner = refreshDockFullscreenBanner;
