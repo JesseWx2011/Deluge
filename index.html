@@ -34,7 +34,7 @@
  
 
     <!-- Meta Tags -->
-    <meta type="date" content="2026-07-31"/>
+    <meta type="date" content="2026-07-28"/>
     <meta name="author" content="JesseWx2011"/>
 
 </head>
@@ -96,6 +96,9 @@
               <div class="toggleSwitch"></div>
           </div>
           <div class="menuDivider"></div>
+          <div class="menuItem" id="settingsButton">
+              <span><i class="fa-solid fa-gear"></i> Settings</span>
+          </div>
           <div style="font-weight:700; padding:6px 8px;">Active Alerts</div>
           <div id="alertsMenuList" class="alertsList">
               <div class="alertsEmpty">No active alerts</div>
@@ -206,7 +209,7 @@
     <div class="modal-container" id="settingsModalContainer" style="display: none;" onclick="if (event.target === this) closeSettingsModal();">
         <div class="settingsModal">
             <div class="settingsModalHeader">
-                <h2>Settings</h2>
+                <h2 style="color: white;">Settings</h2>
                 <button class="settingsModalClose" onclick="closeSettingsModal()">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -215,6 +218,7 @@
                 <div class="settingSection">
                     <label class="settingLabel">Map Style</label>
                     <select id="mapStyleSelect" class="settingInput">
+                        <option value="mapbox://mapbox://styles/hastytube/cman7qzdk00al01sddqg54u7d">Default</option>
                         <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
                         <option value="mapbox://styles/mapbox/light-v11">Light</option>
                         <option value="mapbox://styles/mapbox/satellite-v9">Satellite</option>

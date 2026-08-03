@@ -927,7 +927,9 @@ function extractFlashFloodSourceCategory(description) {
 
     if (upper.includes('RADAR') && upper.includes('GAUGE')) return 'Radar and Gauges';
 
-    if (upper.includes('EMERGENCY MANAGEMENT') || upper.includes('LAW ENFORCEMENT')) return 'Emergency Management';
+    if (upper.includes('EMERGENCY MANAGEMENT')) return 'Emergency Management';
+
+    if (upper.includes('LAW ENFORCEMENT')) return 'Law Enforcement';
 
     if (upper.includes('RADAR')) return 'Radar';
 
@@ -1946,7 +1948,7 @@ function setAlertBannerOverride(properties) {
         title: normalizedEvent.toUpperCase(),
         subtitle: subtitle.toUpperCase(),
         clock: formatAlertBannerClock(expires),
-        date: 'Expires:'
+        date: 'Expires'
     };
 
     if (typeof window.refreshProductBanner === 'function') {

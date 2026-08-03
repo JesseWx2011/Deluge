@@ -945,6 +945,7 @@ function showWebcamModal(properties) {
                 <div id="currentTime" style="margin-bottom: 5px;"></div>
                 <div id="currentWeather" style="margin-bottom: 5px;"></div>
             </div>
+            <div id="cameraFailureNotice" style="display:none; margin-bottom: 12px; padding: 12px 14px; background: rgba(255, 68, 68, 0.18); border: 1px solid rgba(255, 68, 68, 0.55); border-radius: 10px; color: #fff; font-weight: 700; line-height: 1.4;"></div>
             ${content}
             <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333; font-size: 12px; color: #888;">
                 <p style="margin: 0;">If you are experiencing issues with a previous camera you selected suddenly loading, try clearing your cache. <a href="https://support.google.com/accounts/answer/32050?hl=en&co=GENIE.Platform%3DDesktop" target="_blank" style="color: #3b82f6; text-decoration: underline;">Learn how to clear your browser cache</a></p>
@@ -964,9 +965,118 @@ function showWebcamModal(properties) {
         });
     }
 
+    const failureNotice = document.getElementById('cameraFailureNotice');
+    let failureRetrySeconds = 60;
+    let failureTimer = null;
+    let currentActiveStream = typeof stream === 'string' && stream.startsWith('[') ? (parsedStream[0] || stream) : (Array.isArray(parsedStream) ? parsedStream[0] : stream);
+    let activeMediaSelector = 'webcamImage';
+
+    function refreshActiveFeed() {
+        if (!currentActiveStream) return;
+
+        if (type === 'image') {
+            const imageEl = document.getElementById(activeMediaSelector);
+            if (imageEl) {
+                const separator = currentActiveStream.includes('?') ? '&' : '?';
+                imageEl.src = `${currentActiveStream}${separator}t=${Date.now()}`;
+            }
+            return;
+        }
+
+        if (type === 'm3u8' || type === 'mpd') {
+            const videoEl = document.getElementById(activeMediaSelector);
+            if (!videoEl) return;
+
+            if (type === 'm3u8' && window.Hls && Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(currentActiveStream);
+                hls.attachMedia(videoEl);
+            } else {
+                videoEl.src = currentActiveStream;
+                videoEl.load();
+            }
+
+            videoEl.play().catch(() => {});
+            return;
+        }
+
+        if (type === 'youtube') {
+            const iframe = document.querySelector('iframe');
+            if (iframe) {
+                iframe.src = iframe.src;
+            }
+        }
+    }
+
+    function showFeedFailureNotice() {
+        if (!failureNotice) return;
+        failureNotice.style.display = 'block';
+        failureNotice.innerHTML = `Sorry, this feed failed to load, try looking at another camera. :(<br>Reconnecting in <span id="cameraFailureCountdown">60s</span>`;
+
+        const countdownEl = document.getElementById('cameraFailureCountdown');
+        if (!countdownEl) return;
+
+        const restartCountdown = () => {
+            failureRetrySeconds -= 1;
+            countdownEl.textContent = `${failureRetrySeconds}s`;
+
+            if (failureRetrySeconds <= 0) {
+                clearInterval(failureTimer);
+                failureRetrySeconds = 60;
+                refreshActiveFeed();
+                showFeedFailureNotice();
+            }
+        };
+
+        clearInterval(failureTimer);
+        failureTimer = setInterval(restartCountdown, 1000);
+    }
+
+    function hideFeedFailureNotice() {
+        if (failureNotice) {
+            failureNotice.style.display = 'none';
+            failureNotice.innerHTML = '';
+        }
+        if (failureTimer) {
+            clearInterval(failureTimer);
+            failureTimer = null;
+        }
+        failureRetrySeconds = 60;
+    }
+
+    function bindFeedFailureHandlers() {
+        const imageEls = document.querySelectorAll('img[id^="webcamImage"]');
+        imageEls.forEach((image) => {
+            image.addEventListener('error', () => {
+                showFeedFailureNotice();
+            });
+            image.addEventListener('load', () => {
+                hideFeedFailureNotice();
+            });
+        });
+
+        const videoEls = document.querySelectorAll('video[id^="webcamVideo"]');
+        videoEls.forEach((video) => {
+            video.addEventListener('error', () => {
+                showFeedFailureNotice();
+            });
+            video.addEventListener('playing', () => {
+                hideFeedFailureNotice();
+            });
+        });
+
+        const iframe = document.querySelector('iframe');
+        if (iframe) {
+            iframe.addEventListener('error', () => {
+                showFeedFailureNotice();
+            });
+        }
+    }
+
     // Handle modal close with cache clearing
     document.getElementById('closeModalBtn').addEventListener('click', () => {
         modal.style.display = 'none';
+        hideFeedFailureNotice();
         // Clear image cache
         const images = modal.querySelectorAll('img');
         images.forEach(img => {
@@ -986,6 +1096,8 @@ function showWebcamModal(properties) {
     });
 
     modal.style.display = 'flex';
+
+    bindFeedFailureHandlers();
 
     let cameraTimezone = null;
 

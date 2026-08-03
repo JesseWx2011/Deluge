@@ -31,6 +31,7 @@ document.addEventListener("click", (event) => {
 if (settingsButton) {
     settingsButton.addEventListener("click", (e) => {
         e.stopPropagation();
+        layersDropdown?.classList.remove("open");
         openSettingsModal();
     });
 }

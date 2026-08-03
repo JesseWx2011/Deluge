@@ -596,7 +596,7 @@ button {
   z-index: 1000;
   display: flex;
   color: white;
-  width: 50%;
+  width: min(640px, 42vw);
   height: 8vh;
   top: 15px;
   background: var(--glass-bg);
@@ -619,7 +619,7 @@ button {
 
 @media (max-width: 768px) {
     .top-ui {
-        width: 90%;
+        width: min(84vw, 100%);
         height: auto;
         padding: 10px 8px;
         flex-wrap: wrap;
@@ -719,6 +719,12 @@ button {
     cursor: pointer;
 }
 
+.productDrawer .timelineContainer,
+.productDrawer .toolsSection,
+.productDrawer .products {
+    display: none;
+}
+
 @media (max-width: 768px) {
     .productDrawer {
         left: 10px;
@@ -740,6 +746,16 @@ button {
     overflow-y: auto;
     min-width: 265px;
     padding: 18px 20px;
+}
+
+.productDrawer.expanded .timelineContainer,
+.productDrawer.expanded .toolsSection,
+.productDrawer.expanded .products {
+    display: block;
+}
+
+.productDrawer.expanded .timelineContainer {
+    display: flex;
 }
 
 .productDrawer.expanded .products {
@@ -1506,6 +1522,66 @@ button {
     padding: 0;
 }
 
+.settingSection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+    border-radius: 14px;
+    margin: 18px 20px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.settingSection:first-child {
+    margin-top: 20px;
+}
+
+.settingSection:last-child {
+    margin-bottom: 20px;
+}
+
+.settingLabel {
+    display: block;
+    color: #f3f7ff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.25px;
+}
+
+.settingInput {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid rgba(79, 209, 255, 0.32);
+    background: rgba(8, 12, 28, 0.9);
+    color: #fff;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.settingInput:focus {
+    border-color: rgba(79, 209, 255, 0.9);
+    box-shadow: 0 0 0 3px rgba(79, 209, 255, 0.18);
+    transform: translateY(-1px);
+}
+
+.settingInput[type="range"] {
+    padding: 0;
+    background: transparent;
+    accent-color: #4fd1ff;
+    border: none;
+    box-shadow: none;
+}
+
+.settingInput select,
+.settingInput option {
+    color: #fff;
+}
+
 /* ----------------------- Settings Tabs ----------------------- */
 
 .settingsTabs {
@@ -1541,11 +1617,15 @@ button {
 
 .settingsTabContent {
     display: none;
-    padding: 28px;
+    padding: 8px 0 20px;
 }
 
 .settingsTabContent.active {
     display: block;
+}
+
+.settingsModal .settingsTabContent .settingSection {
+    margin: 14px 20px;
 }
 
 .settingsSection {
@@ -3361,6 +3441,14 @@ select:focus-visible {
         width: 100%;
     }
 
+    .productDrawer .toolsSection {
+        display: none;
+    }
+
+    .productDrawer.expanded .toolsSection {
+        display: block;
+    }
+
     .productDrawer .timelineContainer {
         margin-top: 8px;
     }
@@ -3461,7 +3549,7 @@ select:focus-visible {
     .top-ui .search-icon {
         width: 44px;
         height: 44px;
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
     }
@@ -3609,6 +3697,113 @@ select:focus-visible {
     margin-left: 14vw;
     pointer-events: auto;
 }
+
+.dockFullscreenBanner {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translate(-50%, -12px);
+    z-index: 1750;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    font-family: var(--main-font);
+    background: linear-gradient(180deg, rgba(6, 10, 26, 0.94) 0%, rgba(0, 0, 0, 0.94) 100%);
+    border: 1px solid var(--glass-border);
+    border-top-color: transparent;
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    min-width: 360px;
+    max-width: min(92vw, 760px);
+    overflow: visible;
+}
+
+.dockFullscreenBanner::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: calc(var(--product-banner-border-size) + 1px);
+    background: var(--product-banner-border-gradient);
+    background-size: 200% 100%;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    z-index: 1751;
+    pointer-events: none;
+    animation: productBannerBorderShift var(--product-banner-border-animation);
+}
+
+.dockFullscreenBanner.visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.dockFullscreenBannerMain {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 18px;
+    min-width: 0;
+}
+
+.dockFullscreenBannerTitle {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ffffff;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.dockFullscreenBannerSubtitle {
+    margin-top: 3px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7c9dff;
+}
+
+.dockFullscreenBannerDivider {
+    width: 1px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(124, 157, 255, 0.5) 20%, rgba(124, 157, 255, 0.5) 80%, transparent 100%);
+}
+
+.dockFullscreenBannerTimeWrap {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 10px 18px;
+    min-width: 0;
+}
+
+.dockFullscreenBannerClock {
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.dockFullscreenBannerDate {
+    margin-top: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+}
  
 /* Placed below the top-ui pill by default; media query below repositions
    it for narrow/mobile layouts so it doesn't collide with the search bar. */
@@ -3689,6 +3884,15 @@ select:focus-visible {
 /* ----------------------- Mobile ----------------------- */
  
 @media (max-width: 900px) {
+    .dockFullscreenBanner {
+        top: 12px;
+        left: 50%;
+        right: auto;
+        min-width: 0;
+        width: min(92vw, 540px);
+        max-width: min(92vw, 540px);
+    }
+
     .productBanner {
         top: auto;
         bottom: 78px;
@@ -3736,4 +3940,3 @@ select:focus-visible {
         max-width: 38vw;
     }
 }
-    
